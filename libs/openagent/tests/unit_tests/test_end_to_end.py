@@ -10,8 +10,8 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool, tool
 
-from openagent.agent import create_agent
 from openagent.computer import LocalNativeComputer
+from openagent.langchain import create_agent
 
 
 @tool(description="Sample tool")
@@ -236,7 +236,7 @@ class TestDeepAgentEndToEnd:
             )
         )
 
-        with patch("openagent.agent.init_chat_model", return_value=fake_model):
+        with patch("openagent.langchain.agent.init_chat_model", return_value=fake_model):
             # This should not raise AttributeError: 'str' object has no attribute 'profile'
             computer = LocalNativeComputer()
             agent = create_agent(computer, model="claude-sonnet-4-5-20250929", tools=[sample_tool])

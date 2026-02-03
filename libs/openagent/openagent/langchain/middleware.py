@@ -1,4 +1,4 @@
-"""Computer Middleware for providing computer tools to an agent.
+"""Computer Middleware for providing computer tools to a LangChain agent.
 
 This middleware provides agents with a Computer - the core abstraction
 that gives agents CLI-based computer access through bash and file tools.
@@ -23,8 +23,8 @@ from langchain.agents.middleware.types import (
 from langchain_core.tools import BaseTool
 
 from openagent.computer import Computer
+from openagent.langchain.adapter import to_langchain_tool
 from openagent.tools import create_cli_tools
-from openagent.tools.adapter import to_langchain_tool
 
 COMPUTER_SYSTEM_PROMPT = """## Computer Tools
 
@@ -43,7 +43,7 @@ The bash session maintains working directory, environment variables, and shell f
 
 
 class ComputerMiddleware(AgentMiddleware):
-    """Middleware providing computer tools to an agent.
+    """Middleware providing computer tools to a LangChain agent.
 
     This middleware creates a Computer and provides tools that use it,
     giving agents the ability to interact with a computer via shell and files.
@@ -66,7 +66,7 @@ class ComputerMiddleware(AgentMiddleware):
 
     Example:
         ```python
-        from openagent.middleware.computer import ComputerMiddleware
+        from openagent.langchain import ComputerMiddleware
         from openagent.computer import LocalNativeComputer
 
         middleware = ComputerMiddleware(computer=LocalNativeComputer())

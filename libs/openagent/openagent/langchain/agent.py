@@ -1,4 +1,8 @@
-"""Openagent come with planning and CLI tools."""
+"""LangChain agent factory for OpenAgent.
+
+This module provides the create_agent function that creates an OpenAgent
+agent using LangChain's agent infrastructure.
+"""
 
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
@@ -13,7 +17,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer
 
-from openagent.middleware.computer import ComputerMiddleware
+from openagent.langchain.middleware import ComputerMiddleware
 
 if TYPE_CHECKING:
     from openagent.computer import Computer
@@ -37,7 +41,7 @@ def create_agent(
     name: str | None = None,
     cache: BaseCache | None = None,
 ) -> CompiledStateGraph:
-    """Create an OpenAgent agent.
+    """Create an OpenAgent agent using LangChain.
 
     OpenAgent agents require a LLM that supports tool calling.
 

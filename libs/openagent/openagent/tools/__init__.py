@@ -27,11 +27,9 @@ Factory functions:
 - create_filesystem_tools: Create file operation tools (read, write, edit, glob, grep)
 - create_cli_tools: Create all CLI tools sharing a Computer instance
 
-Utilities:
-- to_langchain_tool: Convert BaseAgentTool to LangChain BaseTool
+For LangChain integration, see openagent.langchain module.
 """
 
-from openagent.tools.adapter import to_langchain_tool
 from openagent.tools.base import BaseAgentTool
 from openagent.tools.cli import (
     BashTool,
@@ -64,5 +62,4 @@ __all__ = [
     "create_bash_tool",
     "create_cli_tools",
     "create_filesystem_tools",
-    "to_langchain_tool",
 ]

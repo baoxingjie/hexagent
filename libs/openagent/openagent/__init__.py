@@ -7,7 +7,7 @@ Core Philosophy: Give agents a CLI-based computer, allowing them to work
 like humans do.
 """
 
-from openagent.agent import create_agent
+from openagent.langchain import create_agent
 
 __all__ = [
     "create_agent",

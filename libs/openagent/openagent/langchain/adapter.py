@@ -1,7 +1,7 @@
-"""Adapter utilities for converting agent tools to different frameworks.
+"""Adapter for converting OpenAgent tools to LangChain tools.
 
-This module provides adapter functions to convert OpenAgent's BaseAgentTool
-to other tool interfaces like LangChain's BaseTool.
+This module provides the bridge between OpenAgent's framework-agnostic
+BaseAgentTool and LangChain's StructuredTool interface.
 """
 
 from __future__ import annotations
@@ -31,8 +31,8 @@ def to_langchain_tool(tool: BaseAgentTool[Any]) -> StructuredTool:
 
     Examples:
         ```python
-        from openagent.tools.computer import BashTool
-        from openagent.tools.adapter import to_langchain_tool
+        from openagent.tools.cli import BashTool
+        from openagent.langchain import to_langchain_tool
 
         bash_tool = BashTool(computer)
         langchain_tool = to_langchain_tool(bash_tool)
