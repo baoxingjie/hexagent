@@ -367,3 +367,37 @@ class SkillToolParams(BaseModel):
 
     skill: str = Field(description="The skill name to invoke (e.g., 'commit', 'review-pr', 'pdf')")
     args: str | None = Field(default=None, description="Optional arguments for the skill")
+
+
+# Runtime Types
+
+
+@dataclass(frozen=True)
+class Skill:
+    """A skill capability.
+
+    Skills are specialized capabilities that provide domain-specific
+    knowledge and behaviors to the agent.
+
+    Attributes:
+        name: Unique identifier for the skill.
+        description: Human-readable description for prompt assembly.
+    """
+
+    name: str
+    description: str
+
+
+@dataclass(frozen=True)
+class MCPServer:
+    """An MCP (Model Context Protocol) server capability.
+
+    MCP servers provide external tools and resources to the agent.
+
+    Attributes:
+        name: Unique identifier for the MCP server.
+        description: Human-readable description for prompt assembly.
+    """
+
+    name: str
+    description: str

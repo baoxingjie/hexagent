@@ -101,6 +101,9 @@ ignore-var-parameters = true
 "openagent/tools/web/providers/search/tavily.py" = ["EM101", "EM102", "TRY003"]
 "openagent/tools/web/providers/search/brave.py" = ["EM101", "EM102", "TRY003"]
 
+# Notebooks - ignore all linting for demo notebooks
+"notebooks/*" = ["ALL"]
+
 # Test files
 "tests/unit_tests/chat_model.py" = ["ARG002", "D301", "PLR0912", "RUF012"]
 "tests/unit_tests/test_end_to_end.py" = ["ARG002", "PLR2004"]

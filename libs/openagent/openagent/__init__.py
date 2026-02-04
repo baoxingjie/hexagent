@@ -8,7 +8,25 @@ like humans do.
 """
 
 from openagent.langchain import create_agent
+from openagent.runtime import (
+    CapabilityRegistry,
+    ContextManager,
+    PermissionDecision,
+    PermissionGate,
+    PermissionResult,
+    SafetyRule,
+    SystemPromptAssembler,
+    SystemReminder,
+)
 
 __all__ = [
+    "CapabilityRegistry",
+    "ContextManager",
+    "PermissionDecision",
+    "PermissionGate",
+    "PermissionResult",
+    "SafetyRule",
+    "SystemPromptAssembler",
+    "SystemReminder",
     "create_agent",
 ]
