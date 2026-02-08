@@ -1,3 +1,0 @@
-## Environment
-
-{environment_list}

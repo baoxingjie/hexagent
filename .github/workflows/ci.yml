@@ -55,10 +55,22 @@ jobs:
       working-directory: ${{ matrix.working-directory }}
       python-version: ${{ matrix.python-version }}
 
+  integration_test:
+    strategy:
+      matrix:
+        include:
+          - working-directory: "libs/openagent"
+            python-version: "3.11"
+      fail-fast: false
+    uses: ./.github/workflows/_integration_test.yml
+    with:
+      working-directory: ${{ matrix.working-directory }}
+      python-version: ${{ matrix.python-version }}
+
   # Final status check - ensures all jobs passed
   ci_success:
     name: "✅ CI Success"
-    needs: [lint, test]
+    needs: [lint, test, integration_test]
     if: always()
     runs-on: ubuntu-latest
     env:

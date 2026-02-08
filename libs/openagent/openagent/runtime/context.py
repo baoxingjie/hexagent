@@ -125,8 +125,8 @@ class CompactionController:
 
         Args:
             compaction_prompt: Prompt sent to the LLM to request a summary.
-                Canonical source: ``compaction/request.md`` in the
-                PromptLibrary.
+                Canonical source: ``user_prompt_compaction_request`` via
+                the prompt content module.
             threshold: Token count that triggers compaction.
         """
         self._threshold = threshold

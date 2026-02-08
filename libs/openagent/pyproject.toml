@@ -105,8 +105,8 @@ ignore-var-parameters = true
 "notebooks/*" = ["ALL"]
 
 # Test files
+"tests/integration_tests/test_end_to_end.py" = ["ARG002", "PLR2004"]
 "tests/unit_tests/chat_model.py" = ["ARG002", "D301", "PLR0912", "RUF012"]
-"tests/unit_tests/test_end_to_end.py" = ["ARG002", "PLR2004"]
 "tests/unit_tests/tools/cli/test_glob.py" = ["PLR2004"]
 "tests/unit_tests/tools/web/test_validation.py" = ["S104"]  # Test data for IP validation, not actual binding
 

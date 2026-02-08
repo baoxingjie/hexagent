@@ -11,10 +11,12 @@ from typing import TYPE_CHECKING, Any
 from langchain.agents import create_agent as _create_langchain_agent
 from langchain.chat_models import init_chat_model
 
+from openagent.config import AgentConfig
 from openagent.langchain.middleware import AgentMiddleware
-from openagent.prompts import PromptLibrary, SystemPromptAssembler
+from openagent.prompts import FRESH_SESSION, PromptContext, compose, load
 from openagent.runtime import CapabilityRegistry, PermissionGate
-from openagent.tools import WebFetchTool, WebSearchTool, create_cli_tools
+from openagent.runtime.skills import SkillResolver
+from openagent.tools import SkillTool, WebFetchTool, WebSearchTool, create_cli_tools
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -31,9 +33,10 @@ if TYPE_CHECKING:
 DEFAULT_MODEL = "openai:gpt-5.2"
 
 
-def create_agent(
+async def create_agent(
     computer: Computer,
     *,
+    config: AgentConfig | None = None,
     model: str | BaseChatModel | None = None,
     search_provider: SearchProvider | None = None,
     fetch_provider: FetchProvider | None = None,
@@ -48,10 +51,12 @@ def create_agent(
 
     Default tools: ``bash``, ``read``, ``write``, ``edit``, ``glob``,
     ``grep``.  Web tools (``web_search``, ``web_fetch``) are included
-    only when their providers are supplied.
+    only when their providers are supplied.  The ``skill`` tool is
+    included when skills are discovered from configured search paths.
 
     Args:
         computer: The Computer instance for CLI tools.
+        config: Agent configuration. Defaults to ``AgentConfig()``.
         model: The model to use. Defaults to ``openai:gpt-5``.
         tools: Additional tools the agent should have access to.
         search_provider: Web search provider (e.g. ``TavilySearchProvider()``).
@@ -66,27 +71,23 @@ def create_agent(
     Examples:
         Basic usage with defaults::
 
-            agent = create_agent(LocalNativeComputer())
+            agent = await create_agent(LocalNativeComputer())
             result = await agent.ainvoke({"messages": [...]})
 
-        With web tools::
+        With skills::
 
-            from openagent.tools.web import TavilySearchProvider, JinaFetchProvider
-
-            agent = create_agent(
-                LocalNativeComputer(),
-                search_provider=TavilySearchProvider(),
-                fetch_provider=JinaFetchProvider(),
+            config = AgentConfig(
+                skills=SkillsConfig(search_paths=("/mnt/skills",)),
             )
+            agent = await create_agent(computer, config=config)
     """
+    config = config or AgentConfig()
+
     # Initialize model
     if model is None:
         model = init_chat_model(DEFAULT_MODEL)
     elif isinstance(model, str):
         model = init_chat_model(model)
-
-    # Initialize prompt system
-    library = PromptLibrary()
 
     # Build registry with all default tools
     registry = _create_default_registry(
@@ -95,28 +96,40 @@ def create_agent(
         fetch_provider=fetch_provider,
     )
 
+    # Discover and register skills
+    resolver: SkillResolver | None = None
+    if config.skills.search_paths:
+        resolver = SkillResolver(computer, config.skills.search_paths)
+        skills = await resolver.discover()
+        for skill in skills:
+            registry.register_skill(skill)
+        # Register skill tool with discovered skill names
+        skill_tool = SkillTool(registered_skills={s.name for s in skills})
+        registry.register_tool(skill_tool)
+
     # Assemble system prompt
-    assembler = SystemPromptAssembler()
-    assembled_prompt = assembler.assemble(
-        library=library,
+    ctx = PromptContext(
         tools=registry.get_tools(),
         skills=registry.get_skills(),
         mcps=registry.get_mcps(),
         user_instructions=system_prompt,
     )
+    assembled_prompt = compose(FRESH_SESSION, ctx)
 
     # Create middleware
     middleware = AgentMiddleware(
         registry=registry,
-        system_prompt=assembled_prompt,
         permission_gate=PermissionGate(),
-        compaction_prompt=library.get("compaction/request"),
-        summary_rebuild_template=library.get("compaction/summary_rebuild"),
+        compaction_prompt=load("user_prompt_compaction_request"),
+        summary_rebuild_template=load("user_prompt_compaction_summary_rebuild"),
+        compaction_threshold=config.compaction.threshold,
+        skill_resolver=resolver,
     )
 
     return _create_langchain_agent(
         model,
         tools=tools,
+        system_prompt=assembled_prompt,
         middleware=[middleware],
         checkpointer=checkpointer,
         store=store,

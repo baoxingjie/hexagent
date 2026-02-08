@@ -26,6 +26,7 @@ from openagent.runtime.permission import (
     SafetyRule,
 )
 from openagent.runtime.registry import CapabilityRegistry
+from openagent.runtime.skills import SkillResolver
 
 __all__ = [
     "Append",
@@ -39,4 +40,5 @@ __all__ = [
     "PermissionGate",
     "PermissionResult",
     "SafetyRule",
+    "SkillResolver",
 ]

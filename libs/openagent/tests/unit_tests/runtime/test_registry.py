@@ -118,14 +118,14 @@ class TestCapabilityRegistrySkills:
     def test_register_skill(self) -> None:
         """Test registering a skill."""
         registry = CapabilityRegistry()
-        skill = Skill(name="commit", description="Create git commits")
+        skill = Skill(name="commit", description="Create git commits", path="/skills/commit")
         registry.register_skill(skill)
         assert registry.has_skill("commit")
 
     def test_register_skill_duplicate_raises(self) -> None:
         """Test registering duplicate skill raises ValueError."""
         registry = CapabilityRegistry()
-        skill = Skill(name="commit", description="Create git commits")
+        skill = Skill(name="commit", description="Create git commits", path="/skills/commit")
         registry.register_skill(skill)
 
         with pytest.raises(ValueError, match="Skill already registered"):
@@ -134,7 +134,7 @@ class TestCapabilityRegistrySkills:
     def test_unregister_skill(self) -> None:
         """Test unregistering a skill."""
         registry = CapabilityRegistry()
-        skill = Skill(name="commit", description="Create git commits")
+        skill = Skill(name="commit", description="Create git commits", path="/skills/commit")
         registry.register_skill(skill)
         registry.unregister_skill("commit")
         assert not registry.has_skill("commit")
@@ -148,7 +148,7 @@ class TestCapabilityRegistrySkills:
     def test_get_skill(self) -> None:
         """Test getting a skill by name."""
         registry = CapabilityRegistry()
-        skill = Skill(name="commit", description="Create git commits")
+        skill = Skill(name="commit", description="Create git commits", path="/skills/commit")
         registry.register_skill(skill)
         result = registry.get_skill("commit")
         assert result is skill
@@ -167,8 +167,8 @@ class TestCapabilityRegistrySkills:
     def test_get_skills_multiple(self) -> None:
         """Test getting multiple skills."""
         registry = CapabilityRegistry()
-        skill1 = Skill(name="commit", description="Create git commits")
-        skill2 = Skill(name="review", description="Review code")
+        skill1 = Skill(name="commit", description="Create git commits", path="/skills/commit")
+        skill2 = Skill(name="review", description="Review code", path="/skills/review")
         registry.register_skill(skill1)
         registry.register_skill(skill2)
         skills = registry.get_skills()
@@ -179,7 +179,7 @@ class TestCapabilityRegistrySkills:
     def test_has_skill_true(self) -> None:
         """Test has_skill returns True for registered skill."""
         registry = CapabilityRegistry()
-        registry.register_skill(Skill(name="commit", description="desc"))
+        registry.register_skill(Skill(name="commit", description="desc", path="/skills/commit"))
         assert registry.has_skill("commit") is True
 
     def test_has_skill_false(self) -> None:
@@ -276,7 +276,7 @@ class TestCapabilityRegistryClear:
         """Test clear removes all capabilities."""
         registry = CapabilityRegistry()
         registry.register_tool(MockTool())
-        registry.register_skill(Skill(name="commit", description="desc"))
+        registry.register_skill(Skill(name="commit", description="desc", path="/skills/commit"))
         registry.register_mcp(MCPServer(name="context7", description="desc"))
 
         registry.clear()

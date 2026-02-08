@@ -382,10 +382,12 @@ class Skill:
     Attributes:
         name: Unique identifier for the skill.
         description: Human-readable description for prompt assembly.
+        path: Filesystem path to the skill directory on the computer.
     """
 
     name: str
     description: str
+    path: str
 
 
 @dataclass(frozen=True)

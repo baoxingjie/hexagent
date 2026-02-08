@@ -30,6 +30,8 @@ Factory functions:
 For LangChain integration, see openagent.langchain module.
 """
 
+from typing import Any
+
 from openagent.tools.base import BaseAgentTool
 from openagent.tools.cli import (
     BashTool,
@@ -48,7 +50,26 @@ from openagent.tools.web import (
     WebSearchTool,
 )
 
+BUILTIN_TOOLS: tuple[type[BaseAgentTool[Any]], ...] = (
+    BashTool,
+    ReadTool,
+    WriteTool,
+    EditTool,
+    GlobTool,
+    GrepTool,
+    WebSearchTool,
+    WebFetchTool,
+    SkillTool,
+)
+"""The canonical set of built-in tool classes.
+
+OpenAgent always has a computer — these tools are non-negotiable.
+Everything that needs to know "what tools exist" derives from this
+tuple (template variables, prompt fragment lookup, etc.).
+"""
+
 __all__ = [
+    "BUILTIN_TOOLS",
     "BaseAgentTool",
     "BashTool",
     "EditTool",

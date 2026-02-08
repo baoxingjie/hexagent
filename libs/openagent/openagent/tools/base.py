@@ -48,6 +48,7 @@ class BaseAgentTool(ABC, Generic[ParamsT]):
 
     name: str
     description: str = ""
+    instruction: str = ""
     args_schema: type[ParamsT]
 
     @property

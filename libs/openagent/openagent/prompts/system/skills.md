@@ -1,3 +1,0 @@
-## Skills
-
-{skill_list}

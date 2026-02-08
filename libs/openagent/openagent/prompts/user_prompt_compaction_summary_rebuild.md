@@ -1,5 +1,5 @@
 ## Previous Conversation Summary
 
-{summary_content}
+${SUMMARY_CONTENT}
 
 Please continue from where we left off.

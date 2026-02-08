@@ -6,6 +6,7 @@ Tests the middleware integration with CompactionController:
 3. Token counting and threshold detection
 4. Message rebuilding with Overwrite
 5. Sync and async hooks parity
+6. Skill content injection via abefore_model
 """
 
 # ruff: noqa: PLR2004
@@ -14,13 +15,15 @@ Tests the middleware integration with CompactionController:
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
+from unittest.mock import AsyncMock
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Overwrite
 
 from openagent.langchain.middleware import AgentMiddleware, _estimate_tokens
 from openagent.runtime import CapabilityRegistry, CompactionPhase, PermissionGate
+from openagent.runtime.skills import SkillResolver
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -31,7 +34,7 @@ if TYPE_CHECKING:
 # --- Constants ---
 
 TEST_COMPACTION_PROMPT = "Please summarize what you have done so far."
-TEST_SUMMARY_TEMPLATE = "## Previous Conversation Summary\n\n{summary_content}\n\nPlease continue from where we left off."
+TEST_SUMMARY_TEMPLATE = "## Previous Conversation Summary\n\n${SUMMARY_CONTENT}\n\nPlease continue from where we left off."
 
 # --- Fixtures ---
 
@@ -50,7 +53,6 @@ def permission_gate() -> PermissionGate:
 def middleware(registry: CapabilityRegistry, permission_gate: PermissionGate) -> AgentMiddleware:
     return AgentMiddleware(
         registry=registry,
-        system_prompt="Test prompt",
         permission_gate=permission_gate,
         compaction_prompt=TEST_COMPACTION_PROMPT,
         summary_rebuild_template=TEST_SUMMARY_TEMPLATE,
@@ -217,7 +219,6 @@ class TestTokenCounting:
 
         mw = AgentMiddleware(
             registry=registry,
-            system_prompt="Test",
             permission_gate=permission_gate,
             compaction_prompt=TEST_COMPACTION_PROMPT,
             summary_rebuild_template=TEST_SUMMARY_TEMPLATE,
@@ -408,7 +409,6 @@ class TestCustomCompactionPrompt:
 
         mw = AgentMiddleware(
             registry=registry,
-            system_prompt="Test",
             permission_gate=permission_gate,
             compaction_prompt=custom_prompt,
             summary_rebuild_template=TEST_SUMMARY_TEMPLATE,
@@ -433,3 +433,146 @@ class TestCustomCompactionPrompt:
 
         assert result is not None
         assert result["messages"][-1].content == TEST_COMPACTION_PROMPT
+
+
+# --- Skill injection fixtures ---
+
+
+@pytest.fixture
+def skill_resolver() -> AsyncMock:
+    resolver = AsyncMock(spec=SkillResolver)
+    resolver.load_content = AsyncMock(return_value="Base directory for this skill: /mnt/skills/pdf\n\nPDF instructions here.")
+    return resolver
+
+
+@pytest.fixture
+def middleware_with_skills(
+    registry: CapabilityRegistry,
+    permission_gate: PermissionGate,
+    skill_resolver: AsyncMock,
+) -> AgentMiddleware:
+    return AgentMiddleware(
+        registry=registry,
+        permission_gate=permission_gate,
+        compaction_prompt=TEST_COMPACTION_PROMPT,
+        summary_rebuild_template=TEST_SUMMARY_TEMPLATE,
+        compaction_threshold=100,
+        skill_resolver=skill_resolver,
+    )
+
+
+# --- Skill injection tests ---
+
+
+class TestSkillInjection:
+    """Tests for skill content injection in abefore_model."""
+
+    async def test_skill_tool_call_triggers_injection(
+        self,
+        middleware_with_skills: AgentMiddleware,
+    ) -> None:
+        """When last tool call is 'skill', inject skill content as HumanMessage."""
+        state: dict[str, Any] = {
+            "messages": [
+                HumanMessage(content="Use the pdf skill"),
+                AIMessage(
+                    content="I'll invoke the pdf skill.",
+                    tool_calls=[{"id": "tc_1", "name": "skill", "args": {"skill": "pdf"}}],
+                ),
+                ToolMessage(content="Launching skill: pdf", tool_call_id="tc_1"),
+            ],
+            "compaction_phase": CompactionPhase.NONE,
+        }
+
+        result = await middleware_with_skills.abefore_model(state)
+
+        assert result is not None
+        messages = result["messages"]
+        assert isinstance(messages[-1], HumanMessage)
+        assert "PDF instructions here" in messages[-1].content
+
+    async def test_no_injection_when_non_skill_tool(
+        self,
+        middleware_with_skills: AgentMiddleware,
+    ) -> None:
+        """Non-skill tool calls should not trigger injection."""
+        state: dict[str, Any] = {
+            "messages": [
+                HumanMessage(content="Run a command"),
+                AIMessage(
+                    content="Running bash.",
+                    tool_calls=[{"id": "tc_1", "name": "bash", "args": {"command": "ls"}}],
+                ),
+                ToolMessage(content="file1.txt", tool_call_id="tc_1"),
+            ],
+            "compaction_phase": CompactionPhase.NONE,
+        }
+
+        result = await middleware_with_skills.abefore_model(state)
+        assert result is None
+
+    async def test_no_re_injection_when_human_message_follows(
+        self,
+        middleware_with_skills: AgentMiddleware,
+    ) -> None:
+        """If HumanMessage already follows skill ToolMessage, skip injection."""
+        state: dict[str, Any] = {
+            "messages": [
+                HumanMessage(content="Use pdf skill"),
+                AIMessage(
+                    content="Invoking.",
+                    tool_calls=[{"id": "tc_1", "name": "skill", "args": {"skill": "pdf"}}],
+                ),
+                ToolMessage(content="Launching skill: pdf", tool_call_id="tc_1"),
+                HumanMessage(content="Already injected skill content"),
+            ],
+            "compaction_phase": CompactionPhase.NONE,
+        }
+
+        result = await middleware_with_skills.abefore_model(state)
+        assert result is None
+
+    async def test_no_injection_without_resolver(
+        self,
+        middleware: AgentMiddleware,
+    ) -> None:
+        """Without a skill resolver, skill tool calls are not detected."""
+        state: dict[str, Any] = {
+            "messages": [
+                HumanMessage(content="Use pdf"),
+                AIMessage(
+                    content="Invoking.",
+                    tool_calls=[{"id": "tc_1", "name": "skill", "args": {"skill": "pdf"}}],
+                ),
+                ToolMessage(content="Launching skill: pdf", tool_call_id="tc_1"),
+            ],
+            "compaction_phase": CompactionPhase.NONE,
+        }
+
+        result = await middleware.abefore_model(state)
+        assert result is None
+
+    async def test_skill_injection_preserves_existing_messages(
+        self,
+        middleware_with_skills: AgentMiddleware,
+    ) -> None:
+        """Injection should append to existing messages, not replace."""
+        state: dict[str, Any] = {
+            "messages": [
+                HumanMessage(content="Original"),
+                AIMessage(
+                    content="Invoking.",
+                    tool_calls=[{"id": "tc_1", "name": "skill", "args": {"skill": "pdf"}}],
+                ),
+                ToolMessage(content="Launching skill: pdf", tool_call_id="tc_1"),
+            ],
+            "compaction_phase": CompactionPhase.NONE,
+        }
+
+        result = await middleware_with_skills.abefore_model(state)
+
+        assert result is not None
+        messages = result["messages"]
+        assert len(messages) == 4  # 3 original + 1 injected
+        assert messages[0].content == "Original"
+        assert isinstance(messages[-1], HumanMessage)

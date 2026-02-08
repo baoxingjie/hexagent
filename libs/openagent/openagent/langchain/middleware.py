@@ -18,8 +18,6 @@ from langchain.agents.middleware.types import (
 )
 from langchain.agents.middleware.types import (
     AgentState,
-    ModelRequest,
-    ModelResponse,
     ToolCallRequest,
     hook_config,
 )
@@ -45,6 +43,8 @@ if TYPE_CHECKING:
 
     from langchain_core.tools import BaseTool
     from langgraph.runtime import Runtime
+
+    from openagent.runtime.skills import SkillResolver
 
 # Type alias for token counter function
 TokenCounter = Callable[[Sequence[BaseMessage]], int]
@@ -142,7 +142,6 @@ class AgentMiddleware(LangChainAgentMiddleware):
     - tools property: Provides tools from CapabilityRegistry
     - abefore_model: Applies CompactionController.pre_model_update()
     - aafter_model: Applies CompactionController.post_model_transition()
-    - awrap_model_call: Injects pre-assembled system prompt
     - awrap_tool_call: Validates via PermissionGate, calls approval callback
 
     Examples:
@@ -150,7 +149,6 @@ class AgentMiddleware(LangChainAgentMiddleware):
 
             middleware = AgentMiddleware(
                 registry=registry,
-                system_prompt="You are a helpful assistant.",
                 permission_gate=PermissionGate(),
                 compaction_prompt=library.get("compaction/request"),
                 summary_rebuild_template=library.get("compaction/summary_rebuild"),
@@ -160,7 +158,6 @@ class AgentMiddleware(LangChainAgentMiddleware):
     def __init__(
         self,
         registry: CapabilityRegistry,
-        system_prompt: str,
         permission_gate: PermissionGate,
         *,
         compaction_prompt: str,
@@ -168,29 +165,32 @@ class AgentMiddleware(LangChainAgentMiddleware):
         compaction_threshold: int = 100_000,
         count_tokens: TokenCounter | None = None,
         approval_callback: ApprovalCallback | None = None,
+        skill_resolver: SkillResolver | None = None,
     ) -> None:
         """Initialize the middleware.
 
         Args:
             registry: The capability registry providing tools.
-            system_prompt: The pre-assembled system prompt.
             permission_gate: The permission gate for validating tool calls.
             compaction_prompt: Prompt for requesting conversation summaries.
-                Canonical source: ``compaction/request`` in PromptLibrary.
+                Canonical source: ``user_prompt_compaction_request`` via
+                ``load()``.
             summary_rebuild_template: Template for rebuilding context after
-                compaction.  Must contain ``{summary_content}`` placeholder.
-                Canonical source: ``compaction/summary_rebuild`` in PromptLibrary.
+                compaction.  Must contain ``${SUMMARY_CONTENT}`` placeholder.
+                Canonical source: ``user_prompt_compaction_summary_rebuild``
+                via ``load()``.
             compaction_threshold: Token count that triggers context compaction.
             count_tokens: Optional function to count tokens in messages. If not
                 provided, uses character-based estimation (~4 chars/token).
             approval_callback: Optional callback for human-in-the-loop approval.
+            skill_resolver: Optional skill resolver for injecting skill content.
         """
         self._registry = registry
-        self._system_prompt = system_prompt
         self._permission_gate = permission_gate
         self._approval_callback = approval_callback
         self._count_tokens = count_tokens or _estimate_tokens
         self._summary_rebuild_template = summary_rebuild_template
+        self._skill_resolver = skill_resolver
 
         self._compaction = CompactionController(
             compaction_prompt,
@@ -218,11 +218,15 @@ class AgentMiddleware(LangChainAgentMiddleware):
         state: AgentState,
         _runtime: Runtime[Any] | None = None,
     ) -> dict[str, Any] | None:
-        """Apply compaction updates before model call.
+        """Apply skill injection or compaction updates before model call.
 
-        Delegates to ``CompactionController.pre_model_update()`` and
-        translates the returned ``ContextUpdate`` into LangChain message
-        operations.
+        Skill injection takes priority: if the most recent tool call was
+        a ``skill`` invocation, the skill's markdown content is appended
+        as a ``HumanMessage``.
+
+        Otherwise delegates to ``CompactionController.pre_model_update()``
+        and translates the returned ``ContextUpdate`` into LangChain
+        message operations.
 
         Args:
             state: The current agent state containing messages.
@@ -231,6 +235,20 @@ class AgentMiddleware(LangChainAgentMiddleware):
         Returns:
             State updates dict, or None if no changes.
         """
+        # --- Skill injection (takes priority over compaction) ---
+        if self._skill_resolver is not None:
+            skill_name = self._detect_skill_call(state["messages"])
+            if skill_name is not None:
+                try:
+                    content = await self._skill_resolver.load_content(skill_name)
+                except (KeyError, RuntimeError):
+                    content = None
+                if content is not None:
+                    phase = CompactionPhase(state.get("compaction_phase", CompactionPhase.NONE))
+                    skill_update = Append(content=content)
+                    return self._apply_context_update(state["messages"], skill_update, phase)
+
+        # --- Compaction (existing logic, unchanged) ---
         phase = CompactionPhase(state.get("compaction_phase", CompactionPhase.NONE))
         update, new_phase = self._compaction.pre_model_update(phase)
 
@@ -273,23 +291,6 @@ class AgentMiddleware(LangChainAgentMiddleware):
 
         return None
 
-    async def awrap_model_call(
-        self,
-        request: ModelRequest,
-        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
-    ) -> ModelResponse:
-        """Inject pre-assembled system prompt before model call.
-
-        Args:
-            request: The model request being processed.
-            handler: The async handler function to call with the modified request.
-
-        Returns:
-            The model response from the handler.
-        """
-        updated_request = request.override(system_prompt=self._system_prompt)  # type: ignore[call-arg]
-        return await handler(updated_request)
-
     async def awrap_tool_call(  # type: ignore[override]
         self,
         request: ToolCallRequest,
@@ -331,6 +332,53 @@ class AgentMiddleware(LangChainAgentMiddleware):
         return await handler(request)
 
     # --- Private helpers ---
+
+    def _detect_skill_call(
+        self,
+        messages: Sequence[BaseMessage],
+    ) -> str | None:
+        """Detect if the most recent tool call was 'skill' and return the skill name.
+
+        Walks messages backwards to find the last ToolMessage, then checks
+        the corresponding AIMessage for a 'skill' tool call.
+
+        Returns None if:
+        - No recent skill tool call found
+        - A HumanMessage already follows the skill ToolMessage (already injected)
+        """
+        if not messages:
+            return None
+
+        # Walk backwards: find the last ToolMessage
+        # If we hit a HumanMessage first, skill was already injected
+        last_tool_msg_idx: int | None = None
+        for i in range(len(messages) - 1, -1, -1):
+            msg = messages[i]
+            if isinstance(msg, HumanMessage):
+                return None
+            if isinstance(msg, ToolMessage):
+                last_tool_msg_idx = i
+                break
+
+        if last_tool_msg_idx is None:
+            return None
+
+        tool_msg = messages[last_tool_msg_idx]
+        if not isinstance(tool_msg, ToolMessage):
+            return None  # unreachable, satisfies mypy
+        tool_call_id = tool_msg.tool_call_id
+
+        # Find the corresponding AIMessage with tool_calls
+        for i in range(last_tool_msg_idx - 1, -1, -1):
+            msg = messages[i]
+            if isinstance(msg, AIMessage) and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    if tc.get("id") == tool_call_id and tc.get("name") == "skill":
+                        args: dict[str, str] = tc.get("args", {})
+                        return args.get("skill")
+                break  # Only check the nearest AIMessage
+
+        return None
 
     def _apply_context_update(
         self,
@@ -403,8 +451,9 @@ class AgentMiddleware(LangChainAgentMiddleware):
                     )
                 break
 
+        rebuilt = self._summary_rebuild_template.replace("${SUMMARY_CONTENT}", summary_content)
         return [
-            HumanMessage(content=self._summary_rebuild_template.format(summary_content=summary_content)),
+            HumanMessage(content=rebuilt),
         ]
 
     def _create_denied_response(
@@ -426,7 +475,11 @@ class AgentMiddleware(LangChainAgentMiddleware):
         state: AgentState,
         _runtime: Runtime[Any] | None = None,
     ) -> dict[str, Any] | None:
-        """Sync version of abefore_model."""
+        """Sync version of abefore_model.
+
+        Note: Skill injection requires async (Computer I/O) and is only
+        available via the async ``abefore_model`` hook.
+        """
         phase = CompactionPhase(state.get("compaction_phase", CompactionPhase.NONE))
         update, new_phase = self._compaction.pre_model_update(phase)
 
@@ -455,15 +508,6 @@ class AgentMiddleware(LangChainAgentMiddleware):
             return {"compaction_phase": new_phase, "jump_to": "model"}
 
         return None
-
-    def wrap_model_call(
-        self,
-        request: ModelRequest,
-        handler: Callable[[ModelRequest], ModelResponse],
-    ) -> ModelResponse:
-        """Inject pre-assembled system prompt before model call (sync)."""
-        updated_request = request.override(system_prompt=self._system_prompt)  # type: ignore[call-arg]
-        return handler(updated_request)
 
     def wrap_tool_call(  # type: ignore[override]
         self,

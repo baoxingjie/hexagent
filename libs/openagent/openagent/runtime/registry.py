@@ -3,8 +3,8 @@
 This module provides the CapabilityRegistry class which serves as the
 single source of truth for what capabilities an agent has access to.
 
-The registry is a pure data store. It does NOT handle formatting - that
-responsibility belongs to the SystemPromptAssembler.
+The registry is a pure data store. It does NOT handle formatting - the
+prompt system handles that.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ class CapabilityRegistry:
     """Registry for agent capabilities.
 
     Pure data container for tools, skills, and MCP servers.
-    Does NOT handle formatting - use SystemPromptAssembler for that.
+    Does NOT handle formatting - the prompt system handles that.
 
     Examples:
         ```python
