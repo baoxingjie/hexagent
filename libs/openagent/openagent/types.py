@@ -6,13 +6,30 @@ particularly result types returned by tools and computer operations.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields, replace
-from typing import TYPE_CHECKING, Literal
+from dataclasses import dataclass, field, fields, replace
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     from openagent.computer.base import ExecutionMetadata
+    from openagent.tools.base import BaseAgentTool
+
+
+class CompactionPhase(str, Enum):
+    """State machine phases for context compaction.
+
+    The compaction process spans 3 iterations through the agent loop:
+
+    1. NONE -> REQUESTING: Token count exceeds threshold, request a summary.
+    2. REQUESTING -> APPLYING: LLM generated a summary, apply it.
+    3. APPLYING -> NONE: Rebuild messages with summary, resume normal operation.
+    """
+
+    NONE = "none"
+    REQUESTING = "requesting"
+    APPLYING = "applying"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -390,6 +407,20 @@ class Skill:
     path: str
 
 
+@runtime_checkable
+class SkillCatalog(Protocol):
+    """Minimal interface for checking skill availability.
+
+    Abstracts the mechanism by which skills are discovered, so that
+    consumers (e.g. SkillTool) depend on the capability, not on a
+    concrete resolver implementation.
+    """
+
+    async def has(self, name: str) -> bool:
+        """Return True if *name* is a known skill, re-discovering if needed."""
+        ...
+
+
 @dataclass(frozen=True)
 class MCPServer:
     """An MCP (Model Context Protocol) server capability.
@@ -403,3 +434,56 @@ class MCPServer:
 
     name: str
     description: str
+
+
+@dataclass(frozen=True)
+class GitContext:
+    """Git repository snapshot.
+
+    Attributes:
+        current_branch: Currently checked-out branch name.
+        main_branch: Default/main branch name.
+        status: Output of ``git status --short`` or similar.
+        recent_commits: Formatted recent commit log.
+    """
+
+    current_branch: str
+    main_branch: str
+    status: str
+    recent_commits: str
+
+
+@dataclass(frozen=True)
+class AgentContext:
+    """Frozen snapshot of agent capabilities and session state.
+
+    Created at session boundaries (new conversation, resumed session,
+    or reminder evaluation). Immutable — represents a point-in-time
+    snapshot, not live state.
+
+    Attributes:
+        tools: Currently registered tools.
+        skills: Currently registered skills.
+        mcps: Currently registered MCP servers.
+        environment: Key-value pairs describing the operating environment.
+        user_instructions: User-provided instructions (raw text).
+        git: Git repository snapshot, if available.
+        scratchpad_dir: Path to the scratchpad directory, if configured.
+    """
+
+    tools: list[BaseAgentTool[Any]] = field(default_factory=list)
+    skills: list[Skill] = field(default_factory=list)
+    mcps: list[MCPServer] = field(default_factory=list)
+    environment: dict[str, str] = field(default_factory=dict)
+    user_instructions: str | None = None
+    git: GitContext | None = None
+    scratchpad_dir: str | None = None
+
+    @property
+    def tool_name_vars(self) -> dict[str, str]:
+        """Build ``${NAME_TOOL_NAME}`` template variables from registered tools.
+
+        Returns a dict like ``{"BASH_TOOL_NAME": "bash", "READ_TOOL_NAME": "read", ...}``
+        suitable for unpacking into :func:`~openagent.prompts.content.substitute`.
+        """
+        return {f"{t.name.upper()}_TOOL_NAME": t.name for t in self.tools}

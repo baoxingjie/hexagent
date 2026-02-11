@@ -1,124 +1,61 @@
 """Self-contained section functions for system prompt assembly.
 
-Each section function has the signature ``(PromptContext) -> str | None``.
+Each section function has the signature ``(AgentContext) -> str | None``.
 It loads its own content, resolves its own variables, and decides its own
 inclusion (returning ``None`` to opt out).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import date
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from openagent.prompts.content import find, load
+from openagent.prompts.content import find, load, substitute
 
 if TYPE_CHECKING:
-    from openagent.tools.base import BaseAgentTool
-    from openagent.types import MCPServer, Skill
+    from openagent.types import AgentContext
 
 
 # ---------------------------------------------------------------------------
-# Context types
+# Section functions — each is (AgentContext) -> str | None
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class GitContext:
-    """Git repository snapshot for prompt assembly."""
-
-    current_branch: str
-    main_branch: str
-    status: str
-    recent_commits: str
-
-
-@dataclass(frozen=True)
-class PromptContext:
-    """Runtime state snapshot for prompt assembly.
-
-    Created at session boundaries (new conversation or resumed session).
-    Frozen — represents a point-in-time snapshot, not live state.
-    """
-
-    tools: list[BaseAgentTool[Any]] = field(default_factory=list)
-    skills: list[Skill] = field(default_factory=list)
-    mcps: list[MCPServer] = field(default_factory=list)
-    environment: dict[str, str] = field(default_factory=dict)
-    user_instructions: str | None = None
-    git: GitContext | None = None
-    scratchpad_dir: str | None = None
-
-
-# ---------------------------------------------------------------------------
-# Private helpers
-# ---------------------------------------------------------------------------
-
-
-def _substitute(template: str, **variables: str) -> str:
-    r"""Replace ${key} placeholders with values.
-
-    Unlike ``string.Template``, this does NOT interpret ``$`` as a
-    special character.  Only explicit ``${key}`` patterns matching
-    a provided keyword argument are replaced.  All other ``$``
-    characters are left as-is (no escaping needed in .md files).
-    """
-    result = template
-    for key, value in variables.items():
-        result = result.replace(f"${{{key}}}", value)
-    return result
-
-
-def _tool_vars(ctx: PromptContext) -> dict[str, str]:
-    """Build tool name cross-reference variables from context.
-
-    Returns a dict like ``{"BASH_TOOL_NAME": "bash", "READ_TOOL_NAME": "read", ...}``
-    for all tools in ``ctx.tools``.  Used by section functions that load
-    ``.md`` fragments containing ``${*_TOOL_NAME}`` placeholders.
-    """
-    return {f"{t.name.upper()}_TOOL_NAME": t.name for t in ctx.tools}
-
-
-# ---------------------------------------------------------------------------
-# Section functions — each is (PromptContext) -> str | None
-# ---------------------------------------------------------------------------
-
-
-def identity(_ctx: PromptContext) -> str | None:
+def identity(_ctx: AgentContext) -> str | None:
     """Agent identity and help links. Always included."""
     return load("system_prompt_identity")
 
 
-def doing_tasks(_ctx: PromptContext) -> str | None:
+def doing_tasks(_ctx: AgentContext) -> str | None:
     """Software engineering task guidance. Always included."""
     return load("system_prompt_doing_tasks")
 
 
-def executing_actions(_ctx: PromptContext) -> str | None:
+def executing_actions(_ctx: AgentContext) -> str | None:
     """Reversibility and blast-radius policy. Always included."""
     return load("system_prompt_executing_actions_with_care")
 
 
-def tone_and_style(ctx: PromptContext) -> str | None:
+def tone_and_style(ctx: AgentContext) -> str | None:
     """Output style, objectivity, no time estimates. Always included."""
-    return _substitute(load("system_prompt_tone_and_style"), **_tool_vars(ctx))
+    return substitute(load("system_prompt_tone_and_style"), **ctx.tool_name_vars)
 
 
-def tool_usage_policy(ctx: PromptContext) -> str | None:
+def tool_usage_policy(ctx: AgentContext) -> str | None:
     """Parallel calling and tool-over-bash preference."""
     if not ctx.tools:
         return None
-    return _substitute(load("system_prompt_tool_usage_policy"), **_tool_vars(ctx))
+    return substitute(load("system_prompt_tool_usage_policy"), **ctx.tool_name_vars)
 
 
-def tool_instructions(ctx: PromptContext) -> str | None:
+def tool_instructions(ctx: AgentContext) -> str | None:
     """Per-tool usage instructions with supplementary fragments."""
     if not ctx.tools:
         return None
 
     today = date.today()  # noqa: DTZ011
     shared_vars = {
-        **_tool_vars(ctx),
+        **ctx.tool_name_vars,
         "CURRENT_DATE": today.isoformat(),
         "CURRENT_YEAR": str(today.year),
         "PREVIOUS_YEAR": str(today.year - 1),
@@ -161,14 +98,14 @@ def tool_instructions(ctx: PromptContext) -> str | None:
         # Apply all shared substitutions (tool names, dates,
         # git_parallel_note). str.replace is a safe no-op for
         # vars not present in a given fragment.
-        content = _substitute(content, **shared_vars)
+        content = substitute(content, **shared_vars)
 
         tool_sections.append(f"## {tool.name}\n\n{content}")
 
     return "# Tools\n\n" + "\n\n---\n\n".join(tool_sections)
 
 
-def skills(ctx: PromptContext) -> str | None:
+def skills(ctx: AgentContext) -> str | None:
     """Skill listing."""
     if not ctx.skills:
         return None
@@ -176,7 +113,7 @@ def skills(ctx: PromptContext) -> str | None:
     return f"# Skills\n\nThe following skills extend the agent with specialized workflows. Use the skill tool to invoke them by name.\n\n{items}"
 
 
-def mcps(ctx: PromptContext) -> str | None:
+def mcps(ctx: AgentContext) -> str | None:
     """MCP server listing."""
     if not ctx.mcps:
         return None
@@ -184,7 +121,7 @@ def mcps(ctx: PromptContext) -> str | None:
     return f"# MCP Servers\n\nThe following MCP (Model Context Protocol) servers provide additional capabilities and tools.\n\n{items}"
 
 
-def environment(ctx: PromptContext) -> str | None:
+def environment(ctx: AgentContext) -> str | None:
     """Environment key-value pairs."""
     if not ctx.environment:
         return None
@@ -192,11 +129,11 @@ def environment(ctx: PromptContext) -> str | None:
     return f"# Environment\n\nThe following context describes your operating environment.\n\n{items}"
 
 
-def git_status(ctx: PromptContext) -> str | None:
+def git_status(ctx: AgentContext) -> str | None:
     """Git repository snapshot."""
     if ctx.git is None:
         return None
-    return _substitute(
+    return substitute(
         load("system_prompt_git_status"),
         CURRENT_BRANCH=ctx.git.current_branch,
         MAIN_BRANCH=ctx.git.main_branch,
@@ -205,17 +142,17 @@ def git_status(ctx: PromptContext) -> str | None:
     )
 
 
-def scratchpad(ctx: PromptContext) -> str | None:
+def scratchpad(ctx: AgentContext) -> str | None:
     """Scratchpad directory path."""
     if ctx.scratchpad_dir is None:
         return None
-    return _substitute(
+    return substitute(
         load("system_prompt_scratchpad_directory"),
         SCRATCHPAD_DIR=ctx.scratchpad_dir,
     )
 
 
-def user_instructions(ctx: PromptContext) -> str | None:
+def user_instructions(ctx: AgentContext) -> str | None:
     """User-provided instructions (raw text under heading)."""
     if ctx.user_instructions is None:
         return None

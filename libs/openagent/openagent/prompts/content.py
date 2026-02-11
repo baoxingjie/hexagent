@@ -13,6 +13,9 @@ from __future__ import annotations
 
 import functools
 import importlib.resources
+import re
+
+_PLACEHOLDER_RE = re.compile(r"\$\{([A-Z][A-Z0-9_]*)\}")
 
 
 @functools.cache
@@ -61,3 +64,37 @@ def find(prefix: str) -> list[str]:
         Sorted list of matching keys.
     """
     return sorted(k for k in _scan_package_keys() if k.startswith(prefix))
+
+
+def substitute(template: str, **variables: str) -> str:
+    """Replace ``${KEY}`` placeholders with values.
+
+    Unlike ``string.Template``, this does NOT interpret ``$`` as a
+    special character.  Only explicit ``${KEY}`` patterns matching
+    a provided keyword argument are replaced.  All other ``$``
+    characters are left as-is (no escaping needed in .md files).
+
+    Only uppercase placeholders matching ``[A-Z][A-Z0-9_]*`` are
+    checked — patterns like ``${lowercase}``, ``${OBJ.field}``, or
+    ``${FN()}`` are ignored.
+
+    Args:
+        template: Text containing ``${KEY}`` placeholders.
+        **variables: Keyword arguments mapping placeholder names to values.
+
+    Returns:
+        The template with all provided placeholders resolved.
+
+    Raises:
+        ValueError: If any ``${KEY}`` placeholders remain unresolved
+            after substitution.
+    """
+    result = template
+    for key, value in variables.items():
+        result = result.replace(f"${{{key}}}", value)
+    remaining = _PLACEHOLDER_RE.findall(result)
+    if remaining:
+        unresolved = ", ".join(f"${{{v}}}" for v in remaining)
+        msg = f"Unresolved placeholders: {unresolved}"
+        raise ValueError(msg)
+    return result

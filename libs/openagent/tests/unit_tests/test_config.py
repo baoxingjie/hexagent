@@ -6,8 +6,12 @@ from __future__ import annotations
 
 import pytest
 
-from openagent.config import AgentConfig, CompactionConfig, SkillsConfig
-from openagent.runtime.context import DEFAULT_COMPACTION_THRESHOLD
+from openagent.config import (
+    DEFAULT_COMPACTION_THRESHOLD,
+    AgentConfig,
+    CompactionConfig,
+    SkillsConfig,
+)
 
 
 class TestSkillsConfig:

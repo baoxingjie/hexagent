@@ -11,14 +11,14 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 
 from openagent.prompts import sections
-from openagent.prompts.content import find, load
-from openagent.prompts.sections import GitContext, PromptContext
+from openagent.prompts.content import find, load, substitute
+from openagent.types import AgentContext, GitContext
 
-SectionFn = Callable[[PromptContext], str | None]
+SectionFn = Callable[[AgentContext], str | None]
 """A section function: takes context, returns content or None to opt out."""
 
 
-def compose(profile: Sequence[SectionFn], ctx: PromptContext) -> str:
+def compose(profile: Sequence[SectionFn], ctx: AgentContext) -> str:
     """Compose a system prompt from a profile and context.
 
     Args:
@@ -66,11 +66,12 @@ RESUMED_SESSION: Sequence[SectionFn] = [
 __all__ = [
     "FRESH_SESSION",
     "RESUMED_SESSION",
+    "AgentContext",
     "GitContext",
-    "PromptContext",
     "SectionFn",
     "compose",
     "find",
     "load",
     "sections",
+    "substitute",
 ]

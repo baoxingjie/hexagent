@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _SKILL_FILENAME = "SKILL.md"
+_SKILL_DELIMITER = "===SKILL_FILE==="
 
 
 def _parse_frontmatter(raw: str) -> tuple[dict[str, str], str]:
@@ -70,6 +71,9 @@ class SkillResolver:
     Uses the Computer protocol to run filesystem commands, making it
     work with both LocalNativeComputer and RemoteE2BComputer.
 
+    Discovery uses a single batched shell command per search path to
+    avoid N+1 round-trip overhead with remote computers.
+
     Examples:
         ```python
         resolver = SkillResolver(computer, search_paths=("/mnt/skills",))
@@ -102,11 +106,30 @@ class SkillResolver:
         """The configured search paths."""
         return self._search_paths
 
+    async def has(self, name: str) -> bool:
+        """Return True if *name* is a known skill, re-discovering on cache miss.
+
+        Satisfies the :class:`~openagent.types.SkillCatalog` protocol.
+
+        Args:
+            name: The skill name to check.
+
+        Returns:
+            True if the skill exists (possibly after re-discovery).
+        """
+        if name in self._skills:
+            return True
+        await self.discover()
+        return name in self._skills
+
     async def discover(self) -> list[Skill]:
         """Scan search paths for skill directories and parse metadata.
 
         Each subdirectory containing a SKILL.md file is treated as a skill.
         The SKILL.md frontmatter must contain ``name`` and ``description``.
+
+        Uses a single shell command per search path to batch discovery,
+        avoiding N+1 round-trip overhead with remote computers.
 
         Returns:
             List of discovered Skill objects.
@@ -115,31 +138,26 @@ class SkillResolver:
         discovered: list[Skill] = []
 
         for base_path in self._search_paths:
-            # List subdirectories
-            result = await self._computer.run(f"find {base_path} -maxdepth 1 -mindepth 1 -type d 2>/dev/null")
+            # Single batched command: find all SKILL.md files, print
+            # delimiter + directory path + file content for each.
+            # Uses shell glob (no `find` dependency) and quoting.
+            cmd = (
+                f'for f in "{base_path}"/*/{_SKILL_FILENAME}; do '
+                f'[ -f "$f" ] && '
+                f'printf "{_SKILL_DELIMITER}:%s\\n" "$(dirname "$f")" && '
+                f'cat "$f" && printf "\\n"; '
+                f"done"
+            )
+            result = await self._computer.run(cmd)
             if result.exit_code != 0 or not result.stdout.strip():
                 continue
 
-            for raw_dir in sorted(result.stdout.strip().splitlines()):
-                skill_dir = raw_dir.strip()
-                if not skill_dir:
-                    continue
-
-                skill_file = f"{skill_dir}/{_SKILL_FILENAME}"
-
-                # Read SKILL.md
-                cat_result = await self._computer.run(f"cat {skill_file} 2>/dev/null")
-                if cat_result.exit_code != 0 or not cat_result.stdout.strip():
-                    logger.debug("Skipping %s: no SKILL.md found", skill_dir)
-                    continue
-
+            # Parse batched output into individual skill chunks
+            for skill_dir, raw_content in self._parse_batch_output(result.stdout):
                 try:
-                    metadata, _body = _parse_frontmatter(cat_result.stdout)
+                    metadata, _body = _parse_frontmatter(raw_content)
                 except ValueError:
-                    logger.warning(
-                        "Skipping %s: invalid SKILL.md frontmatter",
-                        skill_dir,
-                    )
+                    logger.warning("Skipping %s: invalid SKILL.md frontmatter", skill_dir)
                     continue
 
                 name = metadata.get("name")
@@ -183,7 +201,7 @@ class SkillResolver:
         skill = self._skills[name]
         skill_file = f"{skill.path}/{_SKILL_FILENAME}"
 
-        result = await self._computer.run(f"cat {skill_file}")
+        result = await self._computer.run(f'cat "{skill_file}"')
         if result.exit_code != 0:
             msg = f"Failed to read {skill_file}: {result.stderr}"
             raise RuntimeError(msg)
@@ -197,3 +215,28 @@ class SkillResolver:
         content = f"Base directory for this skill: {skill.path}\n\n{body}"
         self._content_cache[name] = content
         return content
+
+    @staticmethod
+    def _parse_batch_output(output: str) -> list[tuple[str, str]]:
+        """Parse batched discovery output into (directory, content) pairs.
+
+        Args:
+            output: Raw stdout from the batched discovery command.
+
+        Returns:
+            List of (skill_dir, raw_skill_md_content) tuples.
+        """
+        delimiter_prefix = f"{_SKILL_DELIMITER}:"
+        results: list[tuple[str, str]] = []
+        chunks = output.split(delimiter_prefix)
+
+        for chunk in chunks[1:]:  # skip everything before first delimiter
+            newline_idx = chunk.find("\n")
+            if newline_idx == -1:
+                continue
+            skill_dir = chunk[:newline_idx].strip()
+            raw_content = chunk[newline_idx + 1 :].strip()
+            if skill_dir and raw_content:
+                results.append((skill_dir, raw_content))
+
+        return results

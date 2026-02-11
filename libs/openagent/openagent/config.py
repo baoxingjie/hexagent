@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from openagent.runtime.context import DEFAULT_COMPACTION_THRESHOLD
+DEFAULT_COMPACTION_THRESHOLD = 100_000
 
 
 @dataclass(frozen=True)

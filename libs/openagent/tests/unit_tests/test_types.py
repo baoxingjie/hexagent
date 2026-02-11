@@ -1,8 +1,19 @@
-"""Tests for types.py - ToolResult, CLIResult."""
+"""Tests for types.py — ToolResult, CLIResult, CompactionPhase, AgentContext."""
 
 import pytest
 
-from openagent.types import CLIResult, ToolResult
+from openagent.types import (
+    AgentContext,
+    CLIResult,
+    CompactionPhase,
+    GitContext,
+    MCPServer,
+    Skill,
+    SkillCatalog,
+    ToolResult,
+)
+
+from .conftest import make_tool
 
 
 class TestToolResultBool:
@@ -157,3 +168,97 @@ class TestCLIResult:
         result = CLIResult(stdout="hello")
         with pytest.raises(FrozenInstanceError):
             result.stdout = "world"  # type: ignore[misc]
+
+
+class TestToolResultToText:
+    """Tests for ToolResult.to_text() — the documented formatting contract."""
+
+    def test_output_only(self) -> None:
+        assert ToolResult(output="hello").to_text() == "hello"
+
+    def test_error_only(self) -> None:
+        assert ToolResult(error="file not found").to_text() == "<error>file not found</error>"
+
+    def test_output_and_error(self) -> None:
+        result = ToolResult(output="partial", error="failed").to_text()
+        assert result == "partial\n<error>failed</error>"
+
+    def test_output_and_system(self) -> None:
+        result = ToolResult(output="done", system="session restarted").to_text()
+        assert result == "done\n\n<system>session restarted</system>"
+
+    def test_empty_result(self) -> None:
+        result = ToolResult().to_text()
+        assert result == "<system>Tool ran without output or errors</system>"
+
+    def test_system_only(self) -> None:
+        result = ToolResult(system="session restarted").to_text()
+        assert result == "<system>Tool ran without output or errors\nsession restarted</system>"
+
+    def test_str_delegates_to_to_text(self) -> None:
+        r = ToolResult(output="hello")
+        assert str(r) == r.to_text()
+
+
+class TestCompactionPhase:
+    """Tests for CompactionPhase enum values."""
+
+    def test_enum_values(self) -> None:
+        assert CompactionPhase.NONE.value == "none"
+        assert CompactionPhase.REQUESTING.value == "requesting"
+        assert CompactionPhase.APPLYING.value == "applying"
+
+    def test_string_roundtrip(self) -> None:
+        for phase in CompactionPhase:
+            assert CompactionPhase(phase.value) is phase
+
+    def test_is_str_enum(self) -> None:
+        assert isinstance(CompactionPhase.NONE, str)
+
+
+class TestAgentContext:
+    """Tests for AgentContext — the context snapshot dataclass."""
+
+    def test_defaults_to_empty(self) -> None:
+        ctx = AgentContext()
+        assert ctx.tools == []
+        assert ctx.skills == []
+        assert ctx.mcps == []
+        assert ctx.environment == {}
+        assert ctx.user_instructions is None
+        assert ctx.git is None
+        assert ctx.scratchpad_dir is None
+
+    def test_full_construction(self) -> None:
+        git = GitContext(current_branch="feat", main_branch="main", status="clean", recent_commits="abc")
+        ctx = AgentContext(
+            tools=[make_tool("bash")],
+            skills=[Skill(name="commit", description="desc", path="/p")],
+            mcps=[MCPServer(name="gh", description="desc")],
+            environment={"OS": "Linux"},
+            user_instructions="Be concise",
+            git=git,
+            scratchpad_dir="/tmp/scratch",  # noqa: S108
+        )
+        assert len(ctx.tools) == 1
+        assert len(ctx.skills) == 1
+        assert ctx.git is not None
+        assert ctx.scratchpad_dir == "/tmp/scratch"  # noqa: S108
+
+    def test_tool_name_vars_builds_dict_from_tools(self) -> None:
+        ctx = AgentContext(tools=[make_tool("bash"), make_tool("read")])
+        assert ctx.tool_name_vars == {"BASH_TOOL_NAME": "bash", "READ_TOOL_NAME": "read"}
+
+    def test_tool_name_vars_empty_without_tools(self) -> None:
+        assert AgentContext().tool_name_vars == {}
+
+
+class TestSkillCatalog:
+    """Tests for the SkillCatalog protocol."""
+
+    def test_protocol_is_runtime_checkable(self) -> None:
+        class _Catalog:
+            async def has(self, name: str) -> bool:
+                return True
+
+        assert isinstance(_Catalog(), SkillCatalog)

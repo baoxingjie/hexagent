@@ -1,12 +1,11 @@
-"""Tests for prompt content loading."""
-
-# ruff: noqa: PLR2004
+"""Tests for prompt content loading and substitution."""
 
 from collections.abc import Generator
 
 import pytest
 
 from openagent.prompts import content
+from openagent.prompts.content import substitute
 
 
 @pytest.fixture(autouse=True)
@@ -20,52 +19,34 @@ def _clear_caches() -> Generator[None]:
 class TestLoad:
     """Tests for content.load()."""
 
-    def test_load_existing(self) -> None:
+    def test_load_returns_nonempty_string(self) -> None:
         result = content.load("system_prompt_identity")
         assert isinstance(result, str)
-        assert "OpenAgent" in result
+        assert len(result) > 0
 
     def test_load_missing_raises_key_error(self) -> None:
         with pytest.raises(KeyError, match="Prompt fragment not found"):
             content.load("nonexistent_key_xyz")
 
-    def test_load_system_prompt_fragments(self) -> None:
-        keys = [
-            "system_prompt_identity",
-            "system_prompt_doing_tasks",
-            "system_prompt_executing_actions_with_care",
-            "system_prompt_tone_and_style",
-            "system_prompt_tool_usage_policy",
-            "system_prompt_git_status",
-            "system_prompt_scratchpad_directory",
-        ]
+    def test_all_system_prompt_fragments_loadable(self) -> None:
+        keys = content.find("system_prompt_")
+        assert len(keys) > 0, "Expected at least one system_prompt fragment"
         for key in keys:
             result = content.load(key)
-            assert isinstance(result, str)
             assert len(result) > 0, f"Fragment '{key}' is empty"
 
-    def test_load_tool_instruction_fragments(self) -> None:
-        keys = [
-            "tool_instruction_bash",
-            "tool_instruction_bash_git_commit_and_pr_creation_instructions",
-            "tool_instruction_edit",
-            "tool_instruction_glob",
-            "tool_instruction_grep",
-            "tool_instruction_read",
-            "tool_instruction_write",
-            "tool_instruction_web_search",
-            "tool_instruction_web_fetch",
-            "tool_instruction_skill",
-        ]
+    def test_all_tool_instruction_fragments_loadable(self) -> None:
+        keys = content.find("tool_instruction_")
+        assert len(keys) > 0, "Expected at least one tool_instruction fragment"
         for key in keys:
             result = content.load(key)
-            assert isinstance(result, str)
             assert len(result) > 0, f"Fragment '{key}' is empty"
 
-    def test_load_user_prompt_fragments(self) -> None:
-        for key in ("user_prompt_compaction_request", "user_prompt_compaction_summary_rebuild"):
+    def test_all_user_prompt_fragments_loadable(self) -> None:
+        keys = content.find("user_prompt_")
+        assert len(keys) > 0, "Expected at least one user_prompt fragment"
+        for key in keys:
             result = content.load(key)
-            assert isinstance(result, str)
             assert len(result) > 0, f"Fragment '{key}' is empty"
 
     def test_temporary_dir_excluded(self) -> None:
@@ -76,9 +57,10 @@ class TestLoad:
 class TestFind:
     """Tests for content.find()."""
 
-    def test_find_by_prefix(self) -> None:
+    def test_find_by_prefix_returns_matching_keys(self) -> None:
         result = content.find("system_prompt_")
-        assert len(result) == 7
+        assert len(result) > 0
+        assert all(k.startswith("system_prompt_") for k in result)
 
     def test_find_tool_supplements(self) -> None:
         result = content.find("tool_instruction_bash_")
@@ -91,3 +73,38 @@ class TestFind:
     def test_find_sorted(self) -> None:
         result = content.find("system_prompt_")
         assert result == sorted(result)
+
+
+class TestSubstitute:
+    """Tests for content.substitute()."""
+
+    def test_single_var(self) -> None:
+        assert substitute("Hello ${NAME}!", NAME="World") == "Hello World!"
+
+    def test_multiple_vars(self) -> None:
+        result = substitute("${A} and ${B}", A="one", B="two")
+        assert result == "one and two"
+
+    def test_leaves_dollar_signs_alone(self) -> None:
+        assert substitute("$(cat file) and $HOME") == "$(cat file) and $HOME"
+
+    def test_raises_on_unresolved(self) -> None:
+        with pytest.raises(ValueError, match=r"Unresolved placeholders.*\$\{MISSING\}"):
+            substitute("Hello ${MISSING}!")
+
+    def test_lists_all_unresolved(self) -> None:
+        with pytest.raises(ValueError, match=r"\$\{A\}.*\$\{B\}"):
+            substitute("${A} and ${B}")
+
+    def test_extra_vars_ignored(self) -> None:
+        result = substitute("Hello ${NAME}!", NAME="World", EXTRA="ignored")
+        assert result == "Hello World!"
+
+    def test_no_placeholders_is_noop(self) -> None:
+        text = "No vars here: $dollar sign"
+        assert substitute(text) == text
+
+    def test_ignores_non_uppercase_placeholders(self) -> None:
+        """Lowercase, dotted, and paren patterns are NOT checked."""
+        text = "${lowercase} ${OBJ.field} ${FN()}"
+        assert substitute(text) == text

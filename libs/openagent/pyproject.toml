@@ -54,7 +54,7 @@ packages = ["openagent"]
 [tool.ruff]
 line-length = 150
 # Exclude any files that shouldn't be linted
-exclude = []
+exclude = ["notebooks/"]
 
 [tool.ruff.format]
 docstring-code-format = true  # Formats code blocks in docstrings
@@ -88,10 +88,13 @@ ignore-var-parameters = true
 "tests/*" = [
     "ANN001",  # Missing type annotation for function argument
     "ANN201",  # Missing return type annotation for public function
+    "ARG002",  # Unused method argument - common in protocol/ABC implementations
+    "ASYNC109", # Async timeout params - needed when matching protocol signatures
     "D1",      # Skip documentation rules in tests
     "S101",    # Allow asserts in tests
     "S311",    # Allow pseudo-random generators in tests
     "SLF001",  # Private member access - tests often verify internal state
+    "TID252",  # Relative parent imports - standard in test packages
 ]
 
 # Production files
@@ -100,9 +103,6 @@ ignore-var-parameters = true
 "openagent/tools/web/providers/fetch/firecrawl.py" = ["EM101", "EM102", "TRY003"]
 "openagent/tools/web/providers/search/tavily.py" = ["EM101", "EM102", "TRY003"]
 "openagent/tools/web/providers/search/brave.py" = ["EM101", "EM102", "TRY003"]
-
-# Notebooks - ignore all linting for demo notebooks
-"notebooks/*" = ["ALL"]
 
 # Test files
 "tests/integration_tests/test_end_to_end.py" = ["ARG002", "PLR2004"]

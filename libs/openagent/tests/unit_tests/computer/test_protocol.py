@@ -19,7 +19,7 @@ def test_mock_satisfies_protocol() -> None:
             self,
             command: str,
             *,
-            timeout: float | None = None,  # noqa: ASYNC109, ARG002
+            timeout: float | None = None,
         ) -> CLIResult:
             return CLIResult(stdout=f"mocked: {command}")
 
@@ -48,7 +48,7 @@ async def test_mock_can_execute() -> None:
             self,
             command: str,
             *,
-            timeout: float | None = None,  # noqa: ASYNC109, ARG002
+            timeout: float | None = None,
         ) -> CLIResult:
             return CLIResult(stdout=f"ran: {command}", exit_code=0)
 
