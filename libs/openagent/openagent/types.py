@@ -466,7 +466,6 @@ class AgentContext:
         skills: Currently registered skills.
         mcps: Currently registered MCP servers.
         environment: Key-value pairs describing the operating environment.
-        user_instructions: User-provided instructions (raw text).
         git: Git repository snapshot, if available.
         scratchpad_dir: Path to the scratchpad directory, if configured.
     """
@@ -475,7 +474,6 @@ class AgentContext:
     skills: list[Skill] = field(default_factory=list)
     mcps: list[MCPServer] = field(default_factory=list)
     environment: dict[str, str] = field(default_factory=dict)
-    user_instructions: str | None = None
     git: GitContext | None = None
     scratchpad_dir: str | None = None
 

@@ -150,10 +150,3 @@ def scratchpad(ctx: AgentContext) -> str | None:
         load("system_prompt_scratchpad_directory"),
         SCRATCHPAD_DIR=ctx.scratchpad_dir,
     )
-
-
-def user_instructions(ctx: AgentContext) -> str | None:
-    """User-provided instructions (raw text under heading)."""
-    if ctx.user_instructions is None:
-        return None
-    return f"# User Instructions\n\n{ctx.user_instructions}"

@@ -225,7 +225,6 @@ class TestAgentContext:
         assert ctx.skills == []
         assert ctx.mcps == []
         assert ctx.environment == {}
-        assert ctx.user_instructions is None
         assert ctx.git is None
         assert ctx.scratchpad_dir is None
 
@@ -236,7 +235,6 @@ class TestAgentContext:
             skills=[Skill(name="commit", description="desc", path="/p")],
             mcps=[MCPServer(name="gh", description="desc")],
             environment={"OS": "Linux"},
-            user_instructions="Be concise",
             git=git,
             scratchpad_dir="/tmp/scratch",  # noqa: S108
         )

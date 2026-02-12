@@ -43,7 +43,6 @@ FRESH_SESSION: Sequence[SectionFn] = [
     sections.environment,
     sections.git_status,
     sections.scratchpad,
-    sections.user_instructions,
 ]
 """Profile for a new conversation session."""
 
@@ -59,7 +58,6 @@ RESUMED_SESSION: Sequence[SectionFn] = [
     sections.environment,
     sections.git_status,
     sections.scratchpad,
-    sections.user_instructions,
 ]
 """Profile for a session resumed from compaction. Same as FRESH for now."""
 

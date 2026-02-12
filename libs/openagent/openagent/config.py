@@ -47,7 +47,7 @@ class AgentConfig:
             skills=SkillsConfig(search_paths=("/mnt/skills",)),
             compaction=CompactionConfig(threshold=80_000),
         )
-        agent = await create_agent(computer, config=config)
+        agent = await create_agent(model, computer, config=config)
         ```
     """
 

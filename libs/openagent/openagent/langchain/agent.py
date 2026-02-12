@@ -13,7 +13,7 @@ from langchain.agents import create_agent as _create_langchain_agent
 from langchain.chat_models import init_chat_model
 
 from openagent.config import AgentConfig
-from openagent.harness import PermissionGate, Reminder, SkillResolver, initial_available_skills
+from openagent.harness import BUILTIN_REMINDERS, PermissionGate, SkillResolver
 from openagent.langchain.middleware import AgentMiddleware
 from openagent.prompts import FRESH_SESSION, RESUMED_SESSION, compose, load, substitute
 from openagent.tools import SkillTool, WebFetchTool, WebSearchTool, create_cli_tools
@@ -30,25 +30,23 @@ if TYPE_CHECKING:
     from langgraph.types import Checkpointer
 
     from openagent.computer import Computer
+    from openagent.harness import Reminder
     from openagent.tools.base import BaseAgentTool
     from openagent.tools.web import FetchProvider, SearchProvider
     from openagent.types import Skill
 
-DEFAULT_MODEL = "openai:gpt-5.2"
-
 
 async def create_agent(
+    model: str | BaseChatModel,
     computer: Computer,
     *,
     config: AgentConfig | None = None,
-    model: str | BaseChatModel | None = None,
     search_provider: SearchProvider | None = None,
     fetch_provider: FetchProvider | None = None,
-    tools: Sequence[BaseTool | Callable[..., Any] | dict[str, Any]] | None = None,
+    extra_tools: Sequence[BaseTool | Callable[..., Any] | dict[str, Any]] | None = None,
     checkpointer: Checkpointer | None = None,
     store: BaseStore | None = None,
-    system_prompt: str | None = None,
-    reminders: Sequence[Reminder] = (),
+    reminders: Sequence[Reminder] = BUILTIN_REMINDERS,
 ) -> CompiledStateGraph[Any]:
     """Create an OpenAgent agent using LangChain.
 
@@ -60,32 +58,36 @@ async def create_agent(
     included when skills are discovered from configured search paths.
 
     Args:
-        computer: The Computer instance for CLI tools.
+        model: The model to use, e.g. ``"openai:gpt-5.2"``.
+            Accepts a LangChain ``init_chat_model`` specifier or a
+            pre-configured ``BaseChatModel`` instance.
+        computer: The Computer instance that CLI tools execute against.
         config: Agent configuration. Defaults to ``AgentConfig()``.
-        model: The model to use. Defaults to ``openai:gpt-5.2``.
         search_provider: Web search provider.
         fetch_provider: Web fetch provider.
-        tools: Additional tools the agent should have access to.
+        extra_tools: Additional tools beyond the built-in set.
         checkpointer: LangGraph checkpointer for conversation persistence.
         store: LangGraph store for cross-thread memory.
-        system_prompt: Additional instructions for the agent.
         reminders: Reminder rules for dynamic system-reminder injection.
+            Defaults to ``BUILTIN_REMINDERS``. Pass a custom sequence to
+            override completely, or extend with
+            ``[*BUILTIN_REMINDERS, my_reminder]``.
 
     Returns:
         A configured OpenAgent agent.
 
     Examples:
-        Basic usage with defaults::
+        Basic usage::
 
-            agent = await create_agent(LocalNativeComputer())
+            agent = await create_agent("openai:gpt-5.2", LocalNativeComputer())
             result = await agent.ainvoke({"messages": [...]})
 
-        With skills::
+        With a pre-configured model and skills::
 
             config = AgentConfig(
                 skills=SkillsConfig(search_paths=("/mnt/skills",)),
             )
-            agent = await create_agent(computer, config=config)
+            agent = await create_agent(model, computer, config=config)
     """
     config = config or AgentConfig()
 
@@ -107,18 +109,11 @@ async def create_agent(
         skills = await resolver.discover()
         default_tools.append(SkillTool(catalog=resolver))
 
-    # Build built-in reminders
-    builtin_reminders: list[Reminder] = []
-    if skills:
-        builtin_reminders.append(Reminder(rule=initial_available_skills, position="prepend"))
-    all_reminders = [*builtin_reminders, *reminders]
-
     # Assemble initial system prompt
     ctx = AgentContext(
         tools=default_tools,
         skills=skills,
         mcps=[],
-        user_instructions=system_prompt,
     )
     assembled_prompt = compose(FRESH_SESSION, ctx)
 
@@ -127,7 +122,6 @@ async def create_agent(
         resolver=resolver,
         tools=default_tools,
         summary_template=load("user_prompt_compaction_summary_rebuild"),
-        user_instructions=system_prompt,
     )
 
     # Create middleware (THE runtime)
@@ -139,7 +133,7 @@ async def create_agent(
         compaction_prompt=load("user_prompt_compaction_request"),
         compaction_threshold=config.compaction.threshold,
         skill_resolver=resolver,
-        reminders=all_reminders,
+        reminders=list(reminders),
         rebuild_callback=rebuild,
     )
 
@@ -147,17 +141,15 @@ async def create_agent(
     # via the middleware's first-turn injection and compaction rebuild.
     return _create_langchain_agent(
         resolved_model,
-        tools=tools,
+        tools=extra_tools,
         middleware=[middleware],
         checkpointer=checkpointer,
         store=store,
     ).with_config({"recursion_limit": 1000})
 
 
-def _resolve_model(model: str | BaseChatModel | None) -> BaseChatModel:
+def _resolve_model(model: str | BaseChatModel) -> BaseChatModel:
     """Resolve model argument to a BaseChatModel instance."""
-    if model is None:
-        return init_chat_model(DEFAULT_MODEL)
     if isinstance(model, str):
         return init_chat_model(model)
     return model
@@ -168,7 +160,6 @@ def _make_rebuild_callback(
     resolver: SkillResolver | None,
     tools: Sequence[BaseAgentTool[Any]],
     summary_template: str,
-    user_instructions: str | None,
 ) -> Callable[[str], Awaitable[list[BaseMessage]]]:
     """Create a callback that rebuilds messages after compaction.
 
@@ -192,7 +183,6 @@ def _make_rebuild_callback(
             tools=list(tools),
             skills=current_skills,
             mcps=[],
-            user_instructions=user_instructions,
         )
         new_system_prompt = compose(RESUMED_SESSION, ctx)
 

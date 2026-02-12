@@ -19,7 +19,6 @@ from openagent.prompts.sections import (
     tone_and_style,
     tool_instructions,
     tool_usage_policy,
-    user_instructions,
 )
 from openagent.types import AgentContext, GitContext, MCPServer, Skill
 
@@ -208,18 +207,6 @@ class TestScratchpad:
         assert "/tmp/scratch" in result
 
 
-class TestUserInstructions:
-    def test_returns_none_without_instructions(self) -> None:
-        assert user_instructions(AgentContext()) is None
-
-    def test_renders_instructions(self) -> None:
-        ctx = AgentContext(user_instructions="Be concise")
-        result = user_instructions(ctx)
-        assert result is not None
-        assert "# User Instructions" in result
-        assert "Be concise" in result
-
-
 # ---------------------------------------------------------------------------
 # Compose and profiles
 # ---------------------------------------------------------------------------
@@ -236,8 +223,8 @@ class TestCompose:
         assert "Tool usage policy" not in result
 
     def test_joins_sections_with_double_newline(self) -> None:
-        ctx = AgentContext(user_instructions="Be concise")
-        result = compose([identity, user_instructions], ctx)
+        ctx = AgentContext(skills=[Skill(name="commit", description="desc", path="/p")])
+        result = compose([identity, skills], ctx)
         parts = result.split("\n\n")
         assert len(parts) >= 2
 
@@ -251,20 +238,18 @@ class TestCompose:
         ctx = AgentContext(
             tools=core_tools(),
             skills=[Skill(name="commit", description="desc", path="/p")],
-            user_instructions="Be concise",
         )
         result = compose(FRESH_SESSION, ctx)
         identity_pos = result.index("OpenAgent")
         tools_pos = result.index("# Tools")
         skills_pos = result.index("# Skills")
-        instructions_pos = result.index("# User Instructions")
-        assert identity_pos < tools_pos < skills_pos < instructions_pos
+        assert identity_pos < tools_pos < skills_pos
 
     def test_custom_profile_only_includes_specified_sections(self) -> None:
-        ctx = AgentContext(user_instructions="Be concise")
-        result = compose([identity, user_instructions], ctx)
+        ctx = AgentContext(skills=[Skill(name="commit", description="desc", path="/p")])
+        result = compose([identity, skills], ctx)
         assert "OpenAgent" in result
-        assert "Be concise" in result
+        assert "commit" in result
         assert "Doing tasks" not in result
 
     def test_resumed_session_matches_fresh(self) -> None:

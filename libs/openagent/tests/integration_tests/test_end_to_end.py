@@ -56,7 +56,7 @@ class TestDeepAgentEndToEnd:
 
         # Create a deep agent with the fake model
         computer = LocalNativeComputer()
-        agent = await create_agent(computer, model=model)
+        agent = await create_agent(model, computer)
 
         # Invoke the agent with a simple message
         result = await agent.ainvoke({"messages": [HumanMessage(content="Hello, agent!")]})
@@ -103,7 +103,7 @@ class TestDeepAgentEndToEnd:
 
         # Create a deep agent with the fake model and sample_tool
         computer = LocalNativeComputer()
-        agent = await create_agent(computer, model=model, tools=[sample_tool])
+        agent = await create_agent(model, computer, extra_tools=[sample_tool])
 
         # Invoke the agent
         result = await agent.ainvoke({"messages": [HumanMessage(content="Use the sample tool")]})
@@ -148,7 +148,7 @@ class TestDeepAgentEndToEnd:
 
         # Create a deep agent with the fake model
         computer = LocalNativeComputer()
-        agent = await create_agent(computer, model=model)
+        agent = await create_agent(model, computer)
 
         # Invoke the agent
         result = await agent.ainvoke({"messages": [HumanMessage(content="List files")]})
@@ -201,7 +201,7 @@ class TestDeepAgentEndToEnd:
 
         # Create a deep agent with the fake model and sample_tool
         computer = LocalNativeComputer()
-        agent = await create_agent(computer, model=model, tools=[sample_tool])
+        agent = await create_agent(model, computer, extra_tools=[sample_tool])
 
         # Invoke the agent
         result = await agent.ainvoke({"messages": [HumanMessage(content="Use sample tool twice")]})
@@ -239,7 +239,7 @@ class TestDeepAgentEndToEnd:
         with patch("openagent.langchain.agent.init_chat_model", return_value=fake_model):
             # This should not raise AttributeError: 'str' object has no attribute 'profile'
             computer = LocalNativeComputer()
-            agent = await create_agent(computer, model="claude-sonnet-4-5-20250929", tools=[sample_tool])
+            agent = await create_agent("claude-sonnet-4-5-20250929", computer, extra_tools=[sample_tool])
 
             # Verify agent was created successfully
             assert agent is not None
