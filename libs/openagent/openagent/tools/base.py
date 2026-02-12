@@ -37,7 +37,7 @@ class BaseAgentTool(ABC, Generic[ParamsT]):
 
 
         class MyTool(BaseAgentTool[MyToolParams]):
-            name: str = "my_tool"
+            name: str = "MyTool"
             description: str = "Does something useful"
             args_schema = MyToolParams
 

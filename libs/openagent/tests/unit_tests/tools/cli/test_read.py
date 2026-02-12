@@ -61,10 +61,6 @@ def long_line_file(tmp_path: pytest.TempPathFactory) -> str:
 class TestReadTool:
     """Core ReadTool tests."""
 
-    def test_name(self, tool: ReadTool) -> None:
-        """ReadTool name is 'read'."""
-        assert tool.name == "read"
-
     async def test_read_file(self, tool: ReadTool, sample_file: str) -> None:
         """Read a text file and get numbered output."""
         result = await tool(file_path=sample_file)

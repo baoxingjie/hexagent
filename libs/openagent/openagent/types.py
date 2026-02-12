@@ -481,7 +481,7 @@ class AgentContext:
     def tool_name_vars(self) -> dict[str, str]:
         """Build ``${NAME_TOOL_NAME}`` template variables from registered tools.
 
-        Returns a dict like ``{"BASH_TOOL_NAME": "bash", "READ_TOOL_NAME": "read", ...}``
+        Returns a dict like ``{"BASH_TOOL_NAME": "Bash", "READ_TOOL_NAME": "Read", ...}``
         suitable for unpacking into :func:`~openagent.prompts.content.substitute`.
         """
         return {f"{t.name.upper()}_TOOL_NAME": t.name for t in self.tools}

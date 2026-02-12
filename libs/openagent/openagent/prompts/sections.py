@@ -70,7 +70,8 @@ def tool_instructions(ctx: AgentContext) -> str | None:
     tool_sections: list[str] = []
 
     for tool in ctx.tools:
-        main_key = f"tool_instruction_{tool.name}"
+        file_key = tool.name.lower()
+        main_key = f"tool_instruction_{file_key}"
 
         # Try .md file first, fall back to tool.instruction
         try:
@@ -90,7 +91,7 @@ def tool_instructions(ctx: AgentContext) -> str | None:
         parts: list[str] = [raw]
 
         # Discover and append supplementary fragments
-        prefix = f"tool_instruction_{tool.name}_"
+        prefix = f"tool_instruction_{file_key}_"
         parts.extend(load(supp_key) for supp_key in find(prefix))
 
         content = "\n\n".join(parts)

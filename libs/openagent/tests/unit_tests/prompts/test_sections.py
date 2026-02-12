@@ -52,12 +52,12 @@ class TestExecutingActions:
 
 class TestToneAndStyle:
     def test_includes_heading(self) -> None:
-        result = tone_and_style(AgentContext(tools=[make_tool("bash")]))
+        result = tone_and_style(AgentContext(tools=[make_tool("Bash")]))
         assert result is not None
         assert "Tone and style" in result
 
     def test_resolves_tool_name_placeholders(self) -> None:
-        ctx = AgentContext(tools=[make_tool("bash")])
+        ctx = AgentContext(tools=[make_tool("Bash")])
         result = tone_and_style(ctx)
         assert result is not None
         assert "${BASH_TOOL_NAME}" not in result
@@ -77,7 +77,7 @@ class TestToolUsagePolicy:
         ctx = AgentContext(tools=core_tools())
         result = tool_usage_policy(ctx)
         assert result is not None
-        for name in ("read", "edit", "write"):
+        for name in ("Read", "Edit", "Write"):
             assert name in result
         assert "${READ_TOOL_NAME}" not in result
 
@@ -91,8 +91,8 @@ class TestToolInstructions:
         result = tool_instructions(ctx)
         assert result is not None
         assert "# Tools" in result
-        assert "## bash" in result
-        assert "## read" in result
+        assert "## Bash" in result
+        assert "## Read" in result
         assert "---" in result
 
     def test_includes_supplementary_fragments(self) -> None:
@@ -128,7 +128,7 @@ class TestToolInstructions:
         assert "Custom inline docs." in result
 
     def test_resolves_date_placeholders(self) -> None:
-        ctx = AgentContext(tools=[make_tool("web_search")])
+        ctx = AgentContext(tools=[make_tool("WebSearch")])
         result = tool_instructions(ctx)
         assert result is not None
         assert "${CURRENT_DATE}" not in result
@@ -232,7 +232,7 @@ class TestCompose:
         result = compose(FRESH_SESSION, AgentContext(tools=core_tools()))
         assert "OpenAgent" in result
         assert "# Tools" in result
-        assert "## bash" in result
+        assert "## Bash" in result
 
     def test_section_ordering_matches_profile(self) -> None:
         ctx = AgentContext(

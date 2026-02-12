@@ -24,7 +24,7 @@ class BashTool(BaseAgentTool[BashToolParams]):
     - State persists within the computer session (cwd, env vars)
 
     Attributes:
-        name: Tool name for API registration ("bash").
+        name: Tool name for API registration.
         description: Tool description for LLM.
         args_schema: Pydantic model for input validation.
 
@@ -38,7 +38,7 @@ class BashTool(BaseAgentTool[BashToolParams]):
         ```
     """
 
-    name: Literal["bash"] = "bash"
+    name: Literal["Bash"] = "Bash"
     description: str = "Execute bash commands. Each command runs in a fresh process."
     args_schema = BashToolParams
 

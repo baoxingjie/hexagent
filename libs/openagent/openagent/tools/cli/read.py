@@ -180,7 +180,7 @@ class ReadTool(BaseAgentTool[ReadToolParams]):
     Reads text files and returns content with numbered lines.
 
     Attributes:
-        name: Tool name for API registration ("read").
+        name: Tool name for API registration.
         description: Tool description for LLM.
         args_schema: Pydantic model for input validation.
 
@@ -193,7 +193,7 @@ class ReadTool(BaseAgentTool[ReadToolParams]):
         >>> print(result.output)
     """
 
-    name: Literal["read"] = "read"
+    name: Literal["Read"] = "Read"
     description: str = "Read file contents with line numbers."
     args_schema = ReadToolParams
 

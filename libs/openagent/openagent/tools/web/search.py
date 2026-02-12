@@ -38,7 +38,7 @@ class WebSearchTool(BaseAgentTool[WebSearchToolParams]):
         ```
     """
 
-    name: Literal["web_search"] = "web_search"
+    name: Literal["WebSearch"] = "WebSearch"
     description: str = "Search the web for information."
     args_schema = WebSearchToolParams
 

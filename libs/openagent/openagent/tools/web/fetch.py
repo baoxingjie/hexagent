@@ -68,7 +68,7 @@ class WebFetchTool(BaseAgentTool[WebFetchToolParams]):
         ```
     """
 
-    name: Literal["web_fetch"] = "web_fetch"
+    name: Literal["WebFetch"] = "WebFetch"
     description: str = "Fetch content from a web page."
     args_schema = WebFetchToolParams
 

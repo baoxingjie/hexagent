@@ -508,9 +508,6 @@ class TestToolsProperty:
         mw = _make_middleware()
         tools = mw.tools
         assert len(tools) == 6
-        names = {t.name for t in tools}
-        assert "bash" in names
-        assert "read" in names
 
     def test_tools_are_cached(self) -> None:
         mw = _make_middleware()

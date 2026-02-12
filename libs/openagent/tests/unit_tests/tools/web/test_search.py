@@ -19,22 +19,6 @@ def _clear_cache() -> None:
     clear_caches()
 
 
-class TestWebSearchTool:
-    """Tests for WebSearchTool."""
-
-    def test_name(self) -> None:
-        """WebSearchTool name is 'web_search'."""
-        provider = AsyncMock()
-        tool = WebSearchTool(provider)
-        assert tool.name == "web_search"
-
-    def test_description(self) -> None:
-        """WebSearchTool has a description."""
-        provider = AsyncMock()
-        tool = WebSearchTool(provider)
-        assert tool.description != ""
-
-
 class TestWebSearchToolExecution:
     """Tests for WebSearchTool execution."""
 

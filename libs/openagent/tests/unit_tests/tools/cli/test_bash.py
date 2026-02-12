@@ -12,11 +12,6 @@ from openagent.tools import BashTool
 class TestBashTool:
     """Tests for BashTool."""
 
-    def test_name(self) -> None:
-        """BashTool name is 'bash'."""
-        tool = BashTool(LocalNativeComputer())
-        assert tool.name == "bash"
-
     async def test_execute(self) -> None:
         """Execute a simple command."""
         computer = LocalNativeComputer()

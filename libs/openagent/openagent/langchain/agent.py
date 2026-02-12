@@ -51,9 +51,9 @@ async def create_agent(
 
     OpenAgent agents require a LLM that supports tool calling.
 
-    Default tools: ``bash``, ``read``, ``write``, ``edit``, ``glob``,
-    ``grep``.  Web tools (``web_search``, ``web_fetch``) are included
-    only when their providers are supplied.  The ``skill`` tool is
+    Default tools: ``Bash``, ``Read``, ``Write``, ``Edit``, ``Glob``,
+    ``Grep``.  Web tools (``WebSearch``, ``WebFetch``) are included
+    only when their providers are supplied.  The ``Skill`` tool is
     included when skills are discovered from configured search paths.
 
     Args:

@@ -121,7 +121,7 @@ class WriteTool(BaseAgentTool[WriteToolParams]):
     resulting :class:`CLIResult` into a :class:`ToolResult`.
 
     Attributes:
-        name: Tool name for API registration ("write").
+        name: Tool name for API registration.
         description: Tool description for LLM.
         args_schema: Pydantic model for input validation.
 
@@ -135,7 +135,7 @@ class WriteTool(BaseAgentTool[WriteToolParams]):
         ```
     """
 
-    name: Literal["write"] = "write"
+    name: Literal["Write"] = "Write"
     description: str = "Write content to a file. Creates parent directories as needed."
     args_schema = WriteToolParams
 

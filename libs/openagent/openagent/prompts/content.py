@@ -48,7 +48,7 @@ def load(key: str) -> str:
     package = importlib.resources.files("openagent.prompts")
     resource = package.joinpath(f"{key}.md")
     try:
-        return resource.read_text(encoding="utf-8")
+        return resource.read_text(encoding="utf-8").strip()
     except (FileNotFoundError, TypeError) as exc:
         msg = f"Prompt fragment not found: '{key}'"
         raise KeyError(msg) from exc

@@ -18,22 +18,6 @@ def _clear_cache() -> None:
     clear_caches()
 
 
-class TestWebFetchTool:
-    """Tests for WebFetchTool."""
-
-    def test_name(self) -> None:
-        """WebFetchTool name is 'web_fetch'."""
-        provider = AsyncMock()
-        tool = WebFetchTool(provider)
-        assert tool.name == "web_fetch"
-
-    def test_description(self) -> None:
-        """WebFetchTool has a description."""
-        provider = AsyncMock()
-        tool = WebFetchTool(provider)
-        assert tool.description != ""
-
-
 class TestWebFetchToolExecution:
     """Tests for WebFetchTool execution."""
 

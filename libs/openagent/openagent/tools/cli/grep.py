@@ -135,7 +135,7 @@ class GrepTool(BaseAgentTool[GrepToolParams]):
     client-side after ``rg`` returns results.
 
     Attributes:
-        name: Tool name for API registration ("grep").
+        name: Tool name for API registration.
         description: Tool description for LLM.
         args_schema: Pydantic model for input validation.
 
@@ -148,7 +148,7 @@ class GrepTool(BaseAgentTool[GrepToolParams]):
         ```
     """
 
-    name: Literal["grep"] = "grep"
+    name: Literal["Grep"] = "Grep"
     description: str = "Search file contents using ripgrep."
     args_schema = GrepToolParams
 

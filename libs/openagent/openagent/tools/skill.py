@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from openagent.tools.base import BaseAgentTool
 from openagent.types import SkillToolParams, ToolResult
@@ -22,7 +22,7 @@ class SkillTool(BaseAgentTool[SkillToolParams]):
         catalog: Catalog for checking skill availability.
     """
 
-    name: str = "skill"
+    name: Literal["Skill"] = "Skill"
     description: str = "Execute a skill by name with optional arguments."
     args_schema = SkillToolParams
 

@@ -231,7 +231,7 @@ class TestAgentContext:
     def test_full_construction(self) -> None:
         git = GitContext(current_branch="feat", main_branch="main", status="clean", recent_commits="abc")
         ctx = AgentContext(
-            tools=[make_tool("bash")],
+            tools=[make_tool("Bash")],
             skills=[Skill(name="commit", description="desc", path="/p")],
             mcps=[MCPServer(name="gh", description="desc")],
             environment={"OS": "Linux"},
@@ -244,8 +244,8 @@ class TestAgentContext:
         assert ctx.scratchpad_dir == "/tmp/scratch"  # noqa: S108
 
     def test_tool_name_vars_builds_dict_from_tools(self) -> None:
-        ctx = AgentContext(tools=[make_tool("bash"), make_tool("read")])
-        assert ctx.tool_name_vars == {"BASH_TOOL_NAME": "bash", "READ_TOOL_NAME": "read"}
+        ctx = AgentContext(tools=[make_tool("Bash"), make_tool("Read")])
+        assert ctx.tool_name_vars == {"BASH_TOOL_NAME": "Bash", "READ_TOOL_NAME": "Read"}
 
     def test_tool_name_vars_empty_without_tools(self) -> None:
         assert AgentContext().tool_name_vars == {}

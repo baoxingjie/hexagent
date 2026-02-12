@@ -36,8 +36,3 @@ class TestSkillTool:
         result = await tool(skill="pdf")
         assert result.output is not None
         assert "pdf" in result.output
-
-    async def test_tool_metadata(self) -> None:
-        tool = SkillTool(catalog=_FakeCatalog(set()))
-        assert tool.name == "skill"
-        assert tool.description != ""

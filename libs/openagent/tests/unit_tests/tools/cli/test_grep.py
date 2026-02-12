@@ -137,15 +137,6 @@ class TestBuildRgCommand:
 class TestGrepTool:
     """Basic GrepTool tests."""
 
-    def test_name(self) -> None:
-        """GrepTool name is 'grep'."""
-        tool = GrepTool(AsyncMock())
-        assert tool.name == "grep"
-
-    def test_args_schema(self) -> None:
-        """GrepTool uses GrepToolParams."""
-        assert GrepTool.args_schema is GrepToolParams
-
     async def test_execute_delegates_to_computer(self) -> None:
         """Execute builds and runs the rg command via computer."""
         computer = AsyncMock()

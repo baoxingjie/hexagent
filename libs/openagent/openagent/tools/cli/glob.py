@@ -98,12 +98,12 @@ class GlobTool(BaseAgentTool[GlobToolParams]):
     first) and limited to 100 entries.
 
     Attributes:
-        name: Tool name for API registration ("glob").
+        name: Tool name for API registration.
         description: Tool description for LLM.
         args_schema: Pydantic model for input validation.
     """
 
-    name: Literal["glob"] = "glob"
+    name: Literal["Glob"] = "Glob"
     description: str = "Find files matching a glob pattern. Max 100 results."
     args_schema = GlobToolParams
 

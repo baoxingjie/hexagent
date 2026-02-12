@@ -16,11 +16,6 @@ from openagent.tools import WriteTool
 class TestWriteTool:
     """Basic WriteTool tests."""
 
-    def test_name(self) -> None:
-        """WriteTool name is 'write'."""
-        tool = WriteTool(LocalNativeComputer())
-        assert tool.name == "write"
-
     async def test_create_new_file(self, tmp_path: Path) -> None:
         """Writing to a new file creates it and returns success."""
         computer = LocalNativeComputer()

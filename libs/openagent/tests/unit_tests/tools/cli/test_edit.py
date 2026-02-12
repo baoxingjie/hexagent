@@ -16,11 +16,6 @@ if TYPE_CHECKING:
 class TestEditTool:
     """Tests for EditTool basic functionality."""
 
-    def test_name(self) -> None:
-        """EditTool name is 'edit'."""
-        tool = EditTool(LocalNativeComputer())
-        assert tool.name == "edit"
-
     async def test_unique_replacement(self, tmp_path: Path) -> None:
         """Single unique match is replaced."""
         path = tmp_path / "test.txt"

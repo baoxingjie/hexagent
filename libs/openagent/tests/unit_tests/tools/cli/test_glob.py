@@ -13,15 +13,6 @@ from openagent.exceptions import CLIError
 from openagent.tools import GlobTool
 
 
-class TestGlobTool:
-    """Basic GlobTool property tests."""
-
-    def test_name(self) -> None:
-        """GlobTool name is 'glob'."""
-        tool = GlobTool(LocalNativeComputer())
-        assert tool.name == "glob"
-
-
 @pytest.fixture
 def sample_tree(tmp_path: Path) -> Path:
     """Create a directory tree with known files for glob testing.

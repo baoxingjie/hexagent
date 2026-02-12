@@ -152,7 +152,7 @@ class EditTool(BaseAgentTool[EditToolParams]):
     exactly once in the file; otherwise an error is returned.
 
     Attributes:
-        name: Tool name for API registration ("edit").
+        name: Tool name for API registration.
         description: Tool description for LLM.
         args_schema: Pydantic model for input validation.
 
@@ -170,7 +170,7 @@ class EditTool(BaseAgentTool[EditToolParams]):
         ```
     """
 
-    name: Literal["edit"] = "edit"
+    name: Literal["Edit"] = "Edit"
     description: str = "Perform exact string replacement in a file."
     args_schema = EditToolParams
 

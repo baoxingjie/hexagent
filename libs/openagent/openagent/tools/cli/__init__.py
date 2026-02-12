@@ -77,7 +77,7 @@ def create_filesystem_tools(computer: Computer) -> list[BaseAgentTool[Any]]:
         fs_tools = create_filesystem_tools(computer)
 
         # Find the read tool
-        read_tool = next(t for t in fs_tools if t.name == "read")
+        read_tool = next(t for t in fs_tools if t.name == "Read")
         result = await read_tool(file_path="/etc/hosts")
         ```
     """

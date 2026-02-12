@@ -97,7 +97,7 @@ class TestEvaluateReminders:
 class TestInitialAvailableSkills:
     def _ctx_with_skills(self) -> AgentContext:
         return AgentContext(
-            tools=[make_tool("skill")],
+            tools=[make_tool("Skill")],
             skills=[Skill(name="commit", description="Git commits", path="/s/commit")],
         )
 
@@ -128,7 +128,7 @@ class TestInitialAvailableSkills:
 
     def test_includes_all_skill_names(self) -> None:
         ctx = AgentContext(
-            tools=[make_tool("skill")],
+            tools=[make_tool("Skill")],
             skills=[
                 Skill(name="commit", description="Git commits", path="/s/commit"),
                 Skill(name="review", description="Code review", path="/s/review"),

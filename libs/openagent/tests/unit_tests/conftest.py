@@ -34,5 +34,5 @@ def make_tool(name: str, *, instruction: str = "") -> BaseAgentTool[StubParams]:
 
 
 def core_tools() -> list[BaseAgentTool[Any]]:
-    """Return the six core mock tools (bash, read, edit, write, glob, grep)."""
-    return [make_tool(n) for n in ("bash", "read", "edit", "write", "glob", "grep")]
+    """Return the six core mock tools (Bash, Read, Edit, Write, Glob, Grep)."""
+    return [make_tool(n) for n in ("Bash", "Read", "Edit", "Write", "Glob", "Grep")]
