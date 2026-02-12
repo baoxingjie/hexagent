@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from openagent.computer.base import ExecutionMetadata
     from openagent.tools.base import BaseAgentTool
 
@@ -377,6 +379,10 @@ class WebFetchToolParams(BaseModel):
     """Input schema for web fetch tool."""
 
     url: str = Field(description="URL of the web page to fetch and extract content from")
+    prompt: str | None = Field(
+        default=None,
+        description="Optional question to answer about the page content. When provided, returns a focused answer instead of the full page.",
+    )
 
 
 class SkillToolParams(BaseModel):
@@ -387,6 +393,55 @@ class SkillToolParams(BaseModel):
 
 
 # Runtime Types
+
+
+class CompletionModel:
+    """Framework-agnostic LLM invocation wrapper.
+
+    Bundles an async completion function with its input capacity,
+    allowing tools to invoke an LLM without depending on any
+    specific framework.
+
+    Attributes:
+        max_input_chars: Maximum characters the model can accept as input.
+
+    Examples:
+        ```python
+        async def my_complete(system: str, user: str) -> str:
+            return "response"
+
+
+        model = CompletionModel(my_complete, max_input_chars=300_000)
+        result = await model.complete(system="You are helpful.", user="Hello")
+        ```
+    """
+
+    def __init__(
+        self,
+        fn: Callable[[str, str], Awaitable[str]],
+        *,
+        max_input_chars: int,
+    ) -> None:
+        """Create a CompletionModel.
+
+        Args:
+            fn: Async function ``(system, user) -> response`` that invokes the LLM.
+            max_input_chars: Maximum characters the model can accept as input.
+        """
+        self._fn = fn
+        self.max_input_chars = max_input_chars
+
+    async def complete(self, *, system: str, user: str) -> str:
+        """Invoke the LLM with system and user messages.
+
+        Args:
+            system: System instruction for the model.
+            user: User message / prompt.
+
+        Returns:
+            The model's response as a string.
+        """
+        return await self._fn(system, user)
 
 
 @dataclass(frozen=True)

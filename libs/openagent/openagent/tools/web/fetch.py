@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Final, Literal
 import httpx
 
 from openagent.exceptions import ConfigurationError, ToolError, WebAPIError
+from openagent.prompts.content import load, substitute
 from openagent.tools.base import BaseAgentTool
 from openagent.tools.web._cache import cache_key, get_fetch_cache
 from openagent.tools.web._validation import validate_url
@@ -17,6 +18,7 @@ from openagent.types import ToolResult, WebFetchToolParams
 
 if TYPE_CHECKING:
     from openagent.tools.web.providers.fetch import FetchProvider
+    from openagent.types import CompletionModel
 
 # Content size limits
 MAX_CONTENT_SIZE: Final[int] = 10_485_760  # 10MB hard limit
@@ -72,13 +74,22 @@ class WebFetchTool(BaseAgentTool[WebFetchToolParams]):
     description: str = "Fetch content from a web page."
     args_schema = WebFetchToolParams
 
-    def __init__(self, provider: FetchProvider) -> None:
+    def __init__(
+        self,
+        provider: FetchProvider,
+        *,
+        model: CompletionModel | None = None,
+    ) -> None:
         """Initialize the WebFetchTool.
 
         Args:
             provider: The fetch provider to use.
+            model: Optional LLM for prompt-based content summarization.
+                When provided and the caller passes a ``prompt``, the tool
+                returns a focused answer instead of raw page content.
         """
         self._provider = provider
+        self._model = model
 
     async def execute(self, params: WebFetchToolParams) -> ToolResult:
         """Fetch content from a URL.
@@ -118,10 +129,30 @@ class WebFetchTool(BaseAgentTool[WebFetchToolParams]):
         if content_size > MAX_CONTENT_SIZE:
             return ToolResult(error=f"Content exceeds 10MB limit ({content_size:,} bytes)")
 
-        # Apply truncation
+        # Summarize path: when prompt and model are both available,
+        # truncate to the model's input budget and return a focused answer.
+        if params.prompt and self._model:
+            content, _, _ = _truncate_content(result.content, self._model.max_input_chars)
+            user_msg = substitute(
+                load("agent_prompt_webfetch_summarizer"),
+                WEB_CONTENT=content,
+                USER_PROMPT=params.prompt,
+            )
+            summary = await self._model.complete(
+                system=(
+                    "You are a content extraction assistant. Answer the user's question"
+                    " using only the provided web page content. Be concise, direct, and"
+                    " well-structured. If the content does not contain enough information"
+                    " to answer the question, say so — do not supplement with outside"
+                    " knowledge."
+                ),
+                user=user_msg,
+            )
+            return ToolResult(output=summary)
+
+        # Raw path: truncate at default limit and return full content.
         truncated_content, was_truncated, original_length = _truncate_content(result.content)
 
-        # Format output
         lines: list[str] = []
         if result.title:
             lines.append(f"# {result.title}\n")

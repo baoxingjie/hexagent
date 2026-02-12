@@ -17,7 +17,7 @@ from openagent.harness.model import _FALLBACK_COMPACTION_THRESHOLD, ModelProfile
 from openagent.langchain.middleware import AgentMiddleware
 from openagent.prompts import FRESH_SESSION, RESUMED_SESSION, compose, load, substitute
 from openagent.tools import SkillTool, WebFetchTool, WebSearchTool, create_cli_tools
-from openagent.types import AgentContext
+from openagent.types import AgentContext, CompletionModel
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Sequence
@@ -97,12 +97,32 @@ async def create_agent(
     # Initialize model
     resolved_model, compaction_threshold, using_default_threshold = _resolve_model_config(model)
 
+    # Build completion model for web tools (shared by search and fetch)
+    completion_model: CompletionModel | None = None
+    if search_provider is not None or fetch_provider is not None:
+
+        async def _complete(system: str, user: str) -> str:
+            from langchain_core.messages import HumanMessage, SystemMessage
+
+            resp = await resolved_model.ainvoke(
+                [
+                    SystemMessage(content=system),
+                    HumanMessage(content=user),
+                ]
+            )
+            return str(resp.content)
+
+        completion_model = CompletionModel(
+            _complete,
+            max_input_chars=compaction_threshold * 3,  # ~3 chars/token
+        )
+
     # Build tools
     tools: list[BaseAgentTool[Any]] = list(create_cli_tools(computer))
     if search_provider is not None:
-        tools.append(WebSearchTool(search_provider))
+        tools.append(WebSearchTool(search_provider, model=completion_model))
     if fetch_provider is not None:
-        tools.append(WebFetchTool(fetch_provider))
+        tools.append(WebFetchTool(fetch_provider, model=completion_model))
     if extra_tools is not None:
         tools.extend(extra_tools)
 
