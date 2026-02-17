@@ -33,31 +33,27 @@ def compose(profile: Sequence[SectionFn], ctx: AgentContext) -> str:
 
 FRESH_SESSION: Sequence[SectionFn] = [
     sections.identity,
+    sections.agency,
     sections.doing_tasks,
-    sections.executing_actions,
+    sections.executing_actions_with_care,
     sections.tone_and_style,
-    sections.tool_usage_policy,
-    sections.tool_instructions,
-    sections.skills,
-    sections.mcps,
     sections.environment,
-    sections.git_status,
-    sections.scratchpad,
+    sections.using_your_tools,
+    sections.tool_instructions,
+    sections.mcps,
 ]
 """Profile for a new conversation session."""
 
 RESUMED_SESSION: Sequence[SectionFn] = [
     sections.identity,
+    sections.agency,
     sections.doing_tasks,
-    sections.executing_actions,
+    sections.executing_actions_with_care,
     sections.tone_and_style,
-    sections.tool_usage_policy,
-    sections.tool_instructions,
-    sections.skills,
-    sections.mcps,
     sections.environment,
-    sections.git_status,
-    sections.scratchpad,
+    sections.using_your_tools,
+    sections.tool_instructions,
+    sections.mcps,
 ]
 """Profile for a session resumed from compaction. Same as FRESH for now."""
 

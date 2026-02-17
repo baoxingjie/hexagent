@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from langchain.agents import create_agent as _create_langchain_agent
 from langchain.chat_models import init_chat_model
 
-from openagent.harness import BUILTIN_REMINDERS, DEFAULT_SKILL_PATHS, PermissionGate, SkillResolver
+from openagent.harness import BUILTIN_REMINDERS, DEFAULT_SKILL_PATHS, EnvironmentResolver, PermissionGate, SkillResolver
 from openagent.harness.model import _FALLBACK_COMPACTION_THRESHOLD, ModelProfile
 from openagent.langchain.middleware import AgentMiddleware
 from openagent.prompts import FRESH_SESSION, compose
@@ -122,17 +122,12 @@ async def create_agent(
     main_profile = _resolve_to_profile(model)
     fast_profile = _resolve_to_profile(fast_model) if fast_model is not None else main_profile
 
-    # 2. Build completion model from fast_profile (for web tools)
-    completion_model: CompletionModel | None = None
-    if search_provider is not None or fetch_provider is not None:
-        completion_model = _create_completion_model(fast_profile)
-
     # 4. Build tools
     tools: list[BaseAgentTool[Any]] = list(create_cli_tools(computer))
     if search_provider is not None:
-        tools.append(WebSearchTool(search_provider, model=completion_model))
+        tools.append(WebSearchTool(search_provider, model=_create_completion_model(fast_profile)))
     if fetch_provider is not None:
-        tools.append(WebFetchTool(fetch_provider, model=completion_model))
+        tools.append(WebFetchTool(fetch_provider, model=_create_completion_model(fast_profile)))
     if extra_tools is not None:
         tools.extend(extra_tools)
 
@@ -144,8 +139,11 @@ async def create_agent(
         skills = await resolver.discover()
         tools.append(SkillTool(catalog=resolver))
 
-    # 6. Compose initial system prompt
-    ctx = AgentContext(tools=tools, skills=skills, mcps=[])
+    # 6. Detect environment and compose initial system prompt
+    model_name = getattr(main_profile.model, "model_name", type(main_profile.model).__name__)
+    env_resolver = EnvironmentResolver(computer)
+    env = await env_resolver.resolve()
+    ctx = AgentContext(model_name=model_name, tools=tools, skills=skills, mcps=[], environment=env)
     assembled_prompt = compose(FRESH_SESSION, ctx)
 
     # 7. Create middleware
@@ -154,6 +152,8 @@ async def create_agent(
         tools=tools,
         system_prompt=assembled_prompt,
         permission_gate=PermissionGate(),
+        environment=env,
+        environment_resolver=env_resolver,
         skills=skills,
         skill_resolver=resolver,
         reminders=list(reminders),

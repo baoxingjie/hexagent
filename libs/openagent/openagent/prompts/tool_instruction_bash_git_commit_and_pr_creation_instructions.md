@@ -1,4 +1,4 @@
-# Committing changes with git
+### Committing changes with git
 
 Only create commits when requested by the user. If unclear, ask first. When the user asks you to create a new git commit, follow these steps carefully:
 
@@ -41,7 +41,7 @@ git commit -m "$(cat <<'EOF'
    )"
 </example>
 
-# Creating pull requests
+### Creating pull requests
 Use the gh command via the Bash tool for ALL GitHub-related tasks including working with issues, pull requests, checks, and releases. If given a Github URL use the gh command to get the information needed.
 
 IMPORTANT: When the user asks you to create a pull request, follow these steps carefully:
@@ -60,10 +60,10 @@ IMPORTANT: When the user asks you to create a pull request, follow these steps c
    - Create PR using gh pr create with the format below. Use a HEREDOC to pass the body to ensure correct formatting.
 <example>
 gh pr create --title "the pr title" --body "$(cat <<'EOF'
-## Summary
+#### Summary
 <1-3 bullet points>
 
-## Test plan
+#### Test plan
 [Bulleted markdown checklist of TODOs for testing the pull request...]
 EOF
 )"
@@ -72,5 +72,5 @@ EOF
 Important:
 - Return the PR URL when you're done, so the user can see it
 
-# Other common operations
+### Other common operations
 - View comments on a Github PR: gh api repos/foo/bar/pulls/123/comments

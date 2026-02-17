@@ -1,26 +1,24 @@
 """Tests for prompt sections, compose, and profiles."""
 
-# ruff: noqa: S108, PLR2004
+# ruff: noqa: S604, PLR2004
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 
 from openagent.prompts import FRESH_SESSION, RESUMED_SESSION, compose
 from openagent.prompts.sections import (
+    agency,
     doing_tasks,
     environment,
-    executing_actions,
-    git_status,
+    executing_actions_with_care,
     identity,
     mcps,
-    scratchpad,
-    skills,
     tone_and_style,
     tool_instructions,
-    tool_usage_policy,
+    using_your_tools,
 )
-from openagent.types import AgentContext, GitContext, MCPServer, Skill
+from openagent.types import AgentContext, EnvironmentContext, MCPServer
 
 from ..conftest import core_tools, make_tool
 
@@ -43,39 +41,47 @@ class TestDoingTasks:
         assert "Doing tasks" in result
 
 
-class TestExecutingActions:
+class TestExecutingActionsWithCare:
     def test_includes_heading(self) -> None:
-        result = executing_actions(AgentContext())
+        result = executing_actions_with_care(AgentContext())
         assert result is not None
         assert "Executing actions" in result
 
 
 class TestToneAndStyle:
     def test_includes_heading(self) -> None:
-        result = tone_and_style(AgentContext(tools=[make_tool("Bash")]))
+        result = tone_and_style(AgentContext(tools=[make_tool("Bash"), make_tool("Read")]))
         assert result is not None
         assert "Tone and style" in result
 
     def test_resolves_tool_name_placeholders(self) -> None:
-        ctx = AgentContext(tools=[make_tool("Bash")])
+        ctx = AgentContext(tools=[make_tool("Bash"), make_tool("Read")])
         result = tone_and_style(ctx)
         assert result is not None
         assert "${BASH_TOOL_NAME}" not in result
+        assert "${READ_TOOL_NAME}" not in result
 
 
-class TestToolUsagePolicy:
+class TestAgency:
+    def test_includes_heading(self) -> None:
+        result = agency(AgentContext())
+        assert result is not None
+        assert "Agency" in result
+
+
+class TestUsingYourTools:
     def test_returns_none_without_tools(self) -> None:
-        assert tool_usage_policy(AgentContext()) is None
+        assert using_your_tools(AgentContext()) is None
 
     def test_includes_heading_with_tools(self) -> None:
         ctx = AgentContext(tools=core_tools())
-        result = tool_usage_policy(ctx)
+        result = using_your_tools(ctx)
         assert result is not None
-        assert "Tool usage policy" in result
+        assert "Using your tools" in result
 
     def test_resolves_tool_name_placeholders(self) -> None:
         ctx = AgentContext(tools=core_tools())
-        result = tool_usage_policy(ctx)
+        result = using_your_tools(ctx)
         assert result is not None
         for name in ("Read", "Edit", "Write"):
             assert name in result
@@ -136,19 +142,6 @@ class TestToolInstructions:
         assert today.isoformat() in result
 
 
-class TestSkills:
-    def test_returns_none_when_empty(self) -> None:
-        assert skills(AgentContext()) is None
-
-    def test_formats_skill_entry(self) -> None:
-        ctx = AgentContext(skills=[Skill(name="commit", description="Git commits", path="/skills/commit")])
-        result = skills(ctx)
-        assert result is not None
-        assert "# Skills" in result
-        assert "**commit**" in result
-        assert "Git commits" in result
-
-
 class TestMcps:
     def test_returns_none_when_empty(self) -> None:
         assert mcps(AgentContext()) is None
@@ -165,46 +158,24 @@ class TestEnvironment:
     def test_returns_none_when_empty(self) -> None:
         assert environment(AgentContext()) is None
 
-    def test_formats_key_value_pairs(self) -> None:
-        ctx = AgentContext(environment={"OS": "Linux"})
+    def test_loads_md_and_substitutes_vars(self) -> None:
+        env = EnvironmentContext(
+            working_dir="/home/user",
+            is_git_repo=True,
+            platform="linux",
+            shell="bash",
+            os_version="Ubuntu 22.04",
+            today_date=datetime(2026, 2, 14, 10, 30, 0, tzinfo=UTC),
+        )
+        ctx = AgentContext(model_name="gpt-5.2", environment=env)
         result = environment(ctx)
         assert result is not None
-        assert "# Environment" in result
-        assert "OS: Linux" in result
-
-
-class TestGitStatus:
-    def test_returns_none_without_git(self) -> None:
-        assert git_status(AgentContext()) is None
-
-    def test_renders_branch_and_status(self) -> None:
-        git = GitContext(
-            current_branch="feat/test",
-            main_branch="main",
-            status="M file.py",
-            recent_commits="abc123 Initial commit",
-        )
-        result = git_status(AgentContext(git=git))
-        assert result is not None
-        assert "feat/test" in result
-        assert "M file.py" in result
-
-    def test_empty_status_shows_clean(self) -> None:
-        git = GitContext(current_branch="main", main_branch="main", status="", recent_commits="abc")
-        result = git_status(AgentContext(git=git))
-        assert result is not None
-        assert "(clean)" in result
-
-
-class TestScratchpad:
-    def test_returns_none_without_scratchpad(self) -> None:
-        assert scratchpad(AgentContext()) is None
-
-    def test_renders_path(self) -> None:
-        ctx = AgentContext(scratchpad_dir="/tmp/scratch")
-        result = scratchpad(ctx)
-        assert result is not None
-        assert "/tmp/scratch" in result
+        assert "Environment" in result
+        assert "/home/user" in result
+        assert "linux" in result
+        assert "gpt-5.2" in result
+        assert "true" in result
+        assert "Sat Feb 14, 2026" in result
 
 
 # ---------------------------------------------------------------------------
@@ -217,14 +188,14 @@ class TestCompose:
         assert compose([], AgentContext()) == ""
 
     def test_filters_none_sections(self) -> None:
-        ctx = AgentContext()  # no tools → tool_usage_policy returns None
-        result = compose([identity, tool_usage_policy], ctx)
+        ctx = AgentContext()  # no tools → using_your_tools returns None
+        result = compose([identity, using_your_tools], ctx)
         assert "OpenAgent" in result
-        assert "Tool usage policy" not in result
+        assert "Using your tools" not in result
 
     def test_joins_sections_with_double_newline(self) -> None:
-        ctx = AgentContext(skills=[Skill(name="commit", description="desc", path="/p")])
-        result = compose([identity, skills], ctx)
+        ctx = AgentContext(mcps=[MCPServer(name="github", description="GitHub API")])
+        result = compose([identity, mcps], ctx)
         parts = result.split("\n\n")
         assert len(parts) >= 2
 
@@ -237,19 +208,19 @@ class TestCompose:
     def test_section_ordering_matches_profile(self) -> None:
         ctx = AgentContext(
             tools=core_tools(),
-            skills=[Skill(name="commit", description="desc", path="/p")],
+            mcps=[MCPServer(name="github", description="GitHub API")],
         )
         result = compose(FRESH_SESSION, ctx)
         identity_pos = result.index("OpenAgent")
         tools_pos = result.index("# Tools")
-        skills_pos = result.index("# Skills")
-        assert identity_pos < tools_pos < skills_pos
+        mcps_pos = result.index("# MCP Servers")
+        assert identity_pos < tools_pos < mcps_pos
 
     def test_custom_profile_only_includes_specified_sections(self) -> None:
-        ctx = AgentContext(skills=[Skill(name="commit", description="desc", path="/p")])
-        result = compose([identity, skills], ctx)
+        ctx = AgentContext(mcps=[MCPServer(name="github", description="GitHub API")])
+        result = compose([identity, mcps], ctx)
         assert "OpenAgent" in result
-        assert "commit" in result
+        assert "github" in result
         assert "Doing tasks" not in result
 
     def test_resumed_session_matches_fresh(self) -> None:

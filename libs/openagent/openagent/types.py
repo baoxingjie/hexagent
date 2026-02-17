@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from datetime import datetime
 
     from openagent.computer.base import ExecutionMetadata
     from openagent.tools.base import BaseAgentTool
@@ -492,6 +493,30 @@ class MCPServer:
 
 
 @dataclass(frozen=True)
+class EnvironmentContext:
+    """Detected runtime environment properties.
+
+    Populated by :class:`~openagent.harness.environment.EnvironmentResolver`
+    via shell commands on the Computer.
+
+    Attributes:
+        working_dir: Current working directory.
+        is_git_repo: Whether the working directory is inside a git repository.
+        platform: Lowercase kernel name (e.g. ``"darwin"``, ``"linux"``).
+        shell: Shell basename (e.g. ``"zsh"``, ``"bash"``).
+        os_version: Kernel name and release (e.g. ``"Darwin 24.1.0"``).
+        today_date: Timezone-aware datetime on the computer.
+    """
+
+    working_dir: str
+    is_git_repo: bool
+    platform: str
+    shell: str
+    os_version: str
+    today_date: datetime
+
+
+@dataclass(frozen=True)
 class GitContext:
     """Git repository snapshot.
 
@@ -517,20 +542,20 @@ class AgentContext:
     snapshot, not live state.
 
     Attributes:
+        model_name: Model name string (e.g. ``"gpt-5.2"``).
         tools: Currently registered tools.
         skills: Currently registered skills.
         mcps: Currently registered MCP servers.
-        environment: Key-value pairs describing the operating environment.
+        environment: Detected runtime environment, if available.
         git: Git repository snapshot, if available.
-        scratchpad_dir: Path to the scratchpad directory, if configured.
     """
 
+    model_name: str = ""
     tools: list[BaseAgentTool[Any]] = field(default_factory=list)
     skills: list[Skill] = field(default_factory=list)
     mcps: list[MCPServer] = field(default_factory=list)
-    environment: dict[str, str] = field(default_factory=dict)
+    environment: EnvironmentContext | None = None
     git: GitContext | None = None
-    scratchpad_dir: str | None = None
 
     @property
     def tool_name_vars(self) -> dict[str, str]:

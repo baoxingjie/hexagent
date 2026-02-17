@@ -1,11 +1,16 @@
 """Tests for types.py — ToolResult, CLIResult, CompactionPhase, AgentContext."""
 
+# ruff: noqa: S604
+
+from datetime import UTC, datetime
+
 import pytest
 
 from openagent.types import (
     AgentContext,
     CLIResult,
     CompactionPhase,
+    EnvironmentContext,
     GitContext,
     MCPServer,
     Skill,
@@ -224,9 +229,8 @@ class TestAgentContext:
         assert ctx.tools == []
         assert ctx.skills == []
         assert ctx.mcps == []
-        assert ctx.environment == {}
+        assert ctx.environment is None
         assert ctx.git is None
-        assert ctx.scratchpad_dir is None
 
     def test_full_construction(self) -> None:
         git = GitContext(current_branch="feat", main_branch="main", status="clean", recent_commits="abc")
@@ -234,14 +238,19 @@ class TestAgentContext:
             tools=[make_tool("Bash")],
             skills=[Skill(name="commit", description="desc", path="/p")],
             mcps=[MCPServer(name="gh", description="desc")],
-            environment={"OS": "Linux"},
+            environment=EnvironmentContext(
+                working_dir="/home/user",
+                is_git_repo=True,
+                platform="linux",
+                shell="bash",
+                os_version="Linux 6.1.0",
+                today_date=datetime(2026, 2, 14, 10, 30, 0, tzinfo=UTC),
+            ),
             git=git,
-            scratchpad_dir="/tmp/scratch",  # noqa: S108
         )
         assert len(ctx.tools) == 1
         assert len(ctx.skills) == 1
         assert ctx.git is not None
-        assert ctx.scratchpad_dir == "/tmp/scratch"  # noqa: S108
 
     def test_tool_name_vars_builds_dict_from_tools(self) -> None:
         ctx = AgentContext(tools=[make_tool("Bash"), make_tool("Read")])

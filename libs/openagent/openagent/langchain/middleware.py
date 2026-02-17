@@ -35,7 +35,7 @@ from openagent.harness import PermissionGate, PermissionResult, Reminder, evalua
 from openagent.langchain.adapter import to_langchain_tool
 from openagent.prompts import RESUMED_SESSION, compose, load, substitute
 from openagent.prompts.tags import SYSTEM_REMINDER_TAG
-from openagent.types import AgentContext, CompactionPhase
+from openagent.types import AgentContext, CompactionPhase, EnvironmentContext
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Sequence
@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
     from langgraph.runtime import Runtime
 
+    from openagent.harness.environment import EnvironmentResolver
     from openagent.harness.model import ModelProfile
     from openagent.harness.skills import SkillResolver
     from openagent.tools.base import BaseAgentTool
@@ -191,6 +192,8 @@ class AgentMiddleware(LangChainAgentMiddleware):
         tools: Sequence[BaseAgentTool[Any]],
         system_prompt: str,
         permission_gate: PermissionGate,
+        environment: EnvironmentContext | None = None,
+        environment_resolver: EnvironmentResolver | None = None,
         skills: Sequence[Skill] = (),
         mcps: Sequence[MCPServer] = (),
         skill_resolver: SkillResolver | None = None,
@@ -205,6 +208,10 @@ class AgentMiddleware(LangChainAgentMiddleware):
             tools: Agent tools (framework-agnostic).
             system_prompt: Assembled system prompt for first-turn injection.
             permission_gate: Gate for validating tool calls.
+            environment: Initial resolved environment snapshot.
+            environment_resolver: Resolver for re-detecting environment
+                on compaction rebuild.  When provided, ``_rebuild_after_compaction``
+                re-resolves live values (e.g. ``TODAY_DATE``).
             skills: Discovered skills.
             mcps: MCP server descriptors.
             skill_resolver: Optional resolver for injecting skill content.
@@ -214,6 +221,8 @@ class AgentMiddleware(LangChainAgentMiddleware):
         self._model = model
         self._system_prompt = system_prompt
         self._tools = list(tools)
+        self._environment = environment
+        self._environment_resolver = environment_resolver
         self._mcps = list(mcps)
         self._skills = list(skills)
         self._skill_resolver = skill_resolver
@@ -248,15 +257,26 @@ class AgentMiddleware(LangChainAgentMiddleware):
     async def _rebuild_after_compaction(self, summary: str) -> list[BaseMessage]:
         """Rebuild messages after compaction.
 
-        1. Re-discovers skills from filesystem (live snapshot)
-        2. Composes fresh system prompt using RESUMED_SESSION profile
-        3. Returns [SystemMessage(new_prompt), HumanMessage(summary)]
+        1. Re-resolves environment from the computer (live snapshot)
+        2. Re-discovers skills from filesystem (live snapshot)
+        3. Composes fresh system prompt using RESUMED_SESSION profile
+        4. Returns [SystemMessage(new_prompt), HumanMessage(summary)]
         """
+        if self._environment_resolver is not None:
+            self._environment = await self._environment_resolver.resolve()
+
         current_skills: list[Skill] = []
         if self._skill_resolver is not None:
             current_skills = await self._skill_resolver.discover()
 
-        ctx = AgentContext(tools=self._tools, skills=current_skills, mcps=self._mcps)
+        model_name = getattr(self._model.model, "model_name", type(self._model.model).__name__)
+        ctx = AgentContext(
+            model_name=model_name,
+            tools=self._tools,
+            skills=current_skills,
+            mcps=self._mcps,
+            environment=self._environment,
+        )
         new_system_prompt = compose(RESUMED_SESSION, ctx)
         summary_content = substitute(self._summary_template, SUMMARY_CONTENT=summary)
 
@@ -340,10 +360,13 @@ class AgentMiddleware(LangChainAgentMiddleware):
         # --- GROUP 3: Annotators (system reminders) ---
         if self._reminders:
             openai_msgs = convert_to_openai_messages(messages)
+            model_name = getattr(self._model.model, "model_name", type(self._model.model).__name__)
             ctx = AgentContext(
+                model_name=model_name,
                 tools=self._tools,
                 skills=self._skills,
                 mcps=self._mcps,
+                environment=self._environment,
             )
             prepends, appends = evaluate_reminders(self._reminders, openai_msgs, ctx)
 

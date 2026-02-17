@@ -1,11 +1,13 @@
 """Agent harness infrastructure.
 
 This package contains modules that augment the agent loop:
+- Environment detection
 - Permission gating (safety rules, human-in-the-loop approval)
 - Skill discovery and content loading
 - System reminder rules for dynamic message annotation
 """
 
+from openagent.harness.environment import EnvironmentResolver
 from openagent.harness.model import ModelProfile
 from openagent.harness.permission import (
     PermissionDecision,
@@ -24,6 +26,7 @@ from openagent.harness.skills import DEFAULT_SKILL_PATHS, SkillResolver
 __all__ = [
     "BUILTIN_REMINDERS",
     "DEFAULT_SKILL_PATHS",
+    "EnvironmentResolver",
     "ModelProfile",
     "PermissionDecision",
     "PermissionGate",
