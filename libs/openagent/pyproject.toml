@@ -21,6 +21,7 @@ dependencies = [
     "tenacity>=8.0.0",
     "cachetools>=5.0.0",
     "mcp>=1.25.0,<2.0.0",
+    "petname>=2.9",
 ]
 
 [project.optional-dependencies]

@@ -146,6 +146,43 @@ class CLIError(Exception):
     """
 
 
+class VMError(Exception):
+    """Base error for VM infrastructure failures.
+
+    This exception indicates that a VM backend (Lima, WSL, etc.) encountered
+    an error — creating, starting, stopping, or executing shell commands.
+
+    Raise VMError (or a subclass) when:
+    - VM failed to create or start
+    - VM did not reach Running state within timeout
+    - Shell command on the VM timed out
+    - Session user creation or validation failed
+    - Any VM infrastructure operation fails
+
+    Do NOT raise VMError when:
+    - A command inside Computer.run() fails (use CLIError)
+    - A shell command returns non-zero exit code (use CLIResult.exit_code)
+    - Platform or dependency checks fail (use UnsupportedPlatformError / MissingDependencyError)
+    """
+
+
+class LimaError(VMError):
+    """Error raised when Lima VM infrastructure fails.
+
+    Examples:
+        ```python
+        # VM did not start
+        raise LimaError("Lima instance 'openagent' did not reach Running state within 120s")
+
+        # Shell command timed out
+        raise LimaError("timed out after 30s")
+
+        # Session user not found
+        raise LimaError("Session user 'foo' does not exist on the VM")
+        ```
+    """
+
+
 CLI_INFRA_ERROR_SYSTEM_REMINDER = (
     "The execution environment has failed unexpectedly. This is an"
     " unrecoverable system-level failure, not a tool error. Stop current"

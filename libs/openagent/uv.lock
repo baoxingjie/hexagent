@@ -981,6 +981,7 @@ dependencies = [
     { name = "langchain-core" },
     { name = "langchain-openai" },
     { name = "mcp" },
+    { name = "petname" },
     { name = "tenacity" },
     { name = "wcmatch" },
 ]
@@ -1026,6 +1027,7 @@ requires-dist = [
     { name = "langsmith", marker = "extra == 'langsmith'", specifier = ">=0.1.0" },
     { name = "langsmith", marker = "extra == 'observe'", specifier = ">=0.1.0" },
     { name = "mcp", specifier = ">=1.25.0,<2.0.0" },
+    { name = "petname", specifier = ">=2.9" },
     { name = "tenacity", specifier = ">=8.0.0" },
     { name = "wcmatch" },
 ]
@@ -1193,6 +1195,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/fa/36/e27608899f9b8d4dff0617b2d9ab17ca5608956ca44461ac14ac48b44015/pathspec-1.0.4.tar.gz", hash = "sha256:0210e2ae8a21a9137c0d470578cb0e595af87edaa6ebf12ff176f14a02e0e645", size = 131200, upload-time = "2026-01-27T03:59:46.938Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ef/3c/2c197d226f9ea224a9ab8d197933f9da0ae0aac5b6e0f884e2b8d9c8e9f7/pathspec-1.0.4-py3-none-any.whl", hash = "sha256:fb6ae2fd4e7c921a165808a552060e722767cfa526f99ca5156ed2ce45a5c723", size = 55206, upload-time = "2026-01-27T03:59:45.137Z" },
+]
+
+[[package]]
+name = "petname"
+version = "2.9"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f5/74/8f0b5d5231e9045ef690342aa620e1a2f69d5eff1ec04803fc4fae6fe774/petname-2.9.tar.gz", hash = "sha256:df4e44b37c7907b5a5e1a74062d56a5845d7efb8833b21b557fdff99afff2d0c", size = 12956, upload-time = "2026-02-15T04:09:23.095Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/d7/6e9ca18d9d1d73e85be98664cca5d3422873e8838a6cfc84ff2096d9c88c/petname-2.9-py3-none-any.whl", hash = "sha256:57f2e0bb4292e9209b5ef02085a33525c638c07f5ec92ebd6db78e8bb574d238", size = 14093, upload-time = "2026-02-15T04:09:21.791Z" },
 ]
 
 [[package]]
