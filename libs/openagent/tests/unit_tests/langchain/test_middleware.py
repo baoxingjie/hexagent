@@ -56,14 +56,14 @@ def _make_middleware(
         model=MagicMock(),
         compaction_threshold=compaction_threshold,
     )
+    ctx = AgentContext(model=profile, tools=list(core_tools()))
     return AgentMiddleware(
-        model=profile,
-        tools=core_tools(),
+        context=ctx,
         system_prompt=SYSTEM_PROMPT,
         permission_gate=gate or PermissionGate(),
-        approval_callback=approval_callback,
         skill_resolver=skill_resolver,
         reminders=reminders,
+        approval_callback=approval_callback,
     )
 
 
@@ -367,10 +367,18 @@ class TestReminderAnnotation:
         return Reminder(rule=rule, position="prepend")
 
     async def test_prepends_reminder_to_last_message(self) -> None:
-        mw = _make_middleware(
+        profile = ModelProfile(model=MagicMock(), compaction_threshold=100_000)
+        ctx = AgentContext(
+            model=profile,
+            tools=list(core_tools()),
+            skills=[Skill(name="commit", description="desc", path="/p")],
+        )
+        mw = AgentMiddleware(
+            context=ctx,
+            system_prompt=SYSTEM_PROMPT,
+            permission_gate=PermissionGate(),
             reminders=[self._skill_reminder()],
         )
-        mw._skills = [Skill(name="commit", description="desc", path="/p")]
 
         state = _state(
             [

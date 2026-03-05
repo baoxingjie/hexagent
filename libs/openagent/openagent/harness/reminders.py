@@ -22,6 +22,7 @@ from openagent.prompts.tags import SYSTEM_REMINDER_TAG, Tag
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
+    from openagent.tasks import TaskRegistry
     from openagent.types import AgentContext
 
 # OpenAI-compatible message format.
@@ -82,7 +83,7 @@ def evaluate_reminders(
 # ---------------------------------------------------------------------------
 
 
-def initial_available_skills(
+def available_skills_reminder(
     messages: Sequence[Message],
     ctx: AgentContext,
 ) -> str | None:
@@ -103,7 +104,46 @@ def initial_available_skills(
     return substitute(template, **ctx.tool_name_vars, FORMATTED_SKILLS_LIST=formatted)
 
 
+def task_completion_reminder(registry: TaskRegistry) -> Reminder:
+    """Create a reminder that surfaces background task completions.
+
+    Drains completed/failed tasks from the registry and formats them
+    as ``<task-notification>`` blocks for the agent.
+
+    Args:
+        registry: The task registry to drain completions from.
+    """
+
+    def _rule(_messages: Sequence[Message], _ctx: AgentContext) -> str | None:
+        completions = registry.drain_completions()
+        if not completions:
+            return None
+        status_headers: dict[str, str] = {
+            "completed": "A background task completed",
+            "failed": "A background task failed",
+        }
+        parts = [
+            f"{status_headers.get(c.status, f'Background task {c.status}')}:\n"
+            f"<task-notification>\n"
+            f"<task-id>{c.task_id}</task-id>\n"
+            f"<kind>{c.kind}</kind>\n"
+            f"<status>{c.status}</status>\n"
+            f'<summary>Task "{c.description}" {c.status}</summary>\n'
+            f"<result>{c.result.to_text()}</result>\n"
+            f"</task-notification>"
+            for c in completions
+        ]
+        return "\n\n".join(parts)
+
+    return Reminder(rule=_rule, position="append")
+
+
 BUILTIN_REMINDERS: Sequence[Reminder] = [
-    Reminder(rule=initial_available_skills, position="prepend"),
+    Reminder(rule=available_skills_reminder, position="prepend"),
 ]
-"""Default reminder rules for all sessions."""
+"""Default reminder rules for all sessions.
+
+Note: :func:`task_completion_reminder` is also a built-in reminder but requires
+a :class:`~openagent.tasks.TaskRegistry` instance. It is added
+unconditionally by the agent factory.
+"""

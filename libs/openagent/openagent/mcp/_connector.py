@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from types import TracebackType
 
-    from openagent.mcp._tool import McpTool
     from openagent.types import McpServerConfig
 
 
@@ -55,15 +54,11 @@ class McpConnector:
             self._exit_stack = None
 
     @property
-    def tools(self) -> list[McpTool]:
-        """Aggregated tools from all connected servers."""
-        return [t for c in self._clients for t in c.tools]
-
-    @property
     def clients(self) -> list[McpClient]:
         """Connected McpClient instances."""
         return list(self._clients)
 
     def __repr__(self) -> str:
         """Return a string representation of the connector."""
-        return f"McpConnector({self._clients})"
+        names = [c.name for c in self._clients]
+        return f"McpConnector(servers={names!r})"

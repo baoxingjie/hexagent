@@ -67,8 +67,8 @@ class TestMcpConnectorOrchestration:
 
         assert exit_calls == ["s2", "s1"]
 
-    async def test_tools_aggregated_from_all_clients(self) -> None:
-        """Tools from multiple clients are merged into a flat list."""
+    async def test_tools_accessible_via_clients(self) -> None:
+        """Tools from multiple clients are accessible via client.tools."""
 
         async def mock_aenter(self: McpClient) -> McpClient:
             self._exit_stack = AsyncMock()
@@ -94,8 +94,9 @@ class TestMcpConnectorOrchestration:
             patch.object(McpClient, "__aexit__", mock_aexit),
         ):
             async with McpConnector(servers) as connector:
-                assert len(connector.tools) == 3
-                names = [t.name for t in connector.tools]
+                all_tools = [t for c in connector.clients for t in c.tools]
+                assert len(all_tools) == 3
+                names = [t.name for t in all_tools]
                 assert names == ["tool_a", "tool_b", "tool_c"]
 
     async def test_clients_property_returns_all(self) -> None:

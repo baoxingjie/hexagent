@@ -57,9 +57,22 @@ RESUMED_SESSION: Sequence[SectionFn] = [
 ]
 """Profile for a session resumed from compaction. Same as FRESH for now."""
 
+SUBAGENT_SESSION: Sequence[SectionFn] = [
+    sections.environment,
+    sections.tool_instructions,
+    sections.mcps,
+]
+"""Profile for subagent sessions.
+
+Stripped-down: no identity, agency, doing_tasks, executing_actions_with_care,
+tone_and_style. The developer's definition.system_prompt is prepended by
+the spawn function.
+"""
+
 __all__ = [
     "FRESH_SESSION",
     "RESUMED_SESSION",
+    "SUBAGENT_SESSION",
     "AgentContext",
     "GitContext",
     "SectionFn",

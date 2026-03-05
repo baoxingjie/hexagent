@@ -66,9 +66,14 @@ class ModelProfile:
     context_window: int | None = None
     compaction_threshold: int | None = None
 
+    @property
+    def name(self) -> str:
+        """Human-readable model name."""
+        return getattr(self.model, "model_name", type(self.model).__name__)
+
     def __post_init__(self) -> None:
         """Derive compaction_threshold from context_window when possible."""
-        model_name: str = getattr(self.model, "model_name", type(self.model).__name__)
+        model_name = self.name
         if self.compaction_threshold is None and self.context_window is None:
             logger.warning(
                 "[model: %s] Consider providing context_window and/or compaction_threshold in ModelProfile "

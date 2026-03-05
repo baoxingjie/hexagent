@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from openagent.prompts.content import find, load, substitute
 
 if TYPE_CHECKING:
+    from openagent.harness.definition import AgentDefinition
     from openagent.types import AgentContext
 
 
@@ -70,6 +71,14 @@ def using_your_tools(ctx: AgentContext) -> str | None:
     return substitute(load("system_prompt_using_your_tools"), **ctx.tool_name_vars)
 
 
+def _format_available_agents(agents: dict[str, AgentDefinition]) -> str:
+    """Format agent definitions for the ``${AVAILABLE_AGENTS}`` placeholder."""
+    lines = ["- general-purpose: General-purpose agent for any task. (Tools: *)"]
+    for name, defn in agents.items():
+        lines.append(f"- {name}: {defn.description} (Tools: {', '.join(defn.tools)})")
+    return "\n".join(lines)
+
+
 def tool_instructions(ctx: AgentContext) -> str | None:
     """Per-tool usage instructions with supplementary fragments."""
     if not ctx.tools:
@@ -87,6 +96,7 @@ def tool_instructions(ctx: AgentContext) -> str | None:
             "and all commands are likely to succeed, "
             "run multiple tool calls in parallel for optimal performance."
         ),
+        "AVAILABLE_AGENTS": _format_available_agents(ctx.agents),
     }
 
     tool_sections: list[str] = []

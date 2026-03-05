@@ -55,7 +55,9 @@ class McpTool(BaseAgentTool[BaseModel]):
 
     def __repr__(self) -> str:
         """Return a string representation of the tool."""
-        return f"McpTool(name={self.name!r}, description={self.description!r})"
+        max_desc_len = 80
+        desc = self.description[:max_desc_len] + "…" if len(self.description) > max_desc_len else self.description
+        return f"McpTool(name={self.name!r}, description={desc!r})"
 
     async def execute(self, params: BaseModel) -> ToolResult:
         """Execute the MCP tool call and convert the result.

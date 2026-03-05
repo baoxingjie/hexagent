@@ -6,6 +6,7 @@ particularly result types returned by tools and computer operations.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, fields, replace
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal, NotRequired, Protocol, TypedDict, runtime_checkable
@@ -13,10 +14,11 @@ from typing import TYPE_CHECKING, Any, Literal, NotRequired, Protocol, TypedDict
 from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
     from datetime import datetime
 
     from openagent.computer.base import ExecutionMetadata
+    from openagent.harness.definition import AgentDefinition
+    from openagent.harness.model import ModelProfile
     from openagent.mcp import McpClient
     from openagent.tools.base import BaseAgentTool
 
@@ -243,6 +245,22 @@ class BashToolParams(BaseModel):
     """Input schema for bash tool."""
 
     command: str = Field(description="Shell command to execute.")
+    description: str = Field(
+        description=(
+            "Clear, concise description of what this command does in active voice."
+            ' Never use words like "complex" or "risk" in the description'
+            " - just describe what it does."
+        ),
+    )
+    run_in_background: bool = Field(
+        default=False,
+        description="Set to true to run this command in the background. Use TaskOutput to read the output later.",
+    )
+    timeout: int | None = Field(
+        default=None,
+        ge=0,
+        description="Optional timeout in milliseconds (max 600000).",
+    )
 
 
 class ReadToolParams(BaseModel):
@@ -394,7 +412,94 @@ class SkillToolParams(BaseModel):
     args: str | None = Field(default=None, description="Optional arguments for the skill")
 
 
+class AgentToolParams(BaseModel):
+    """Input schema for the Agent tool."""
+
+    description: str = Field(description="Short description of the task (3-5 words)")
+    prompt: str = Field(description="The task for the agent to perform")
+    subagent_type: str = Field(
+        default="general-purpose",
+        description="The type of specialized agent to use for this task",
+    )
+    resume: str | None = Field(
+        default=None,
+        description="Optional agent ID to resume from. Continues the previous agent's conversation.",
+    )
+    run_in_background: bool = Field(
+        default=False,
+        description="Set to true to run this agent in the background. Use TaskOutput to read the output later.",
+    )
+
+
+class TaskOutputToolParams(BaseModel):
+    """Input schema for the TaskOutput tool."""
+
+    task_id: str = Field(description="The task ID to get output from")
+    block: bool = Field(default=True, description="Whether to wait for completion")
+    timeout: int = Field(
+        default=30000,
+        ge=0,
+        le=600000,
+        description="Max wait time in ms",
+    )
+
+
+class TaskStopToolParams(BaseModel):
+    """Input schema for the TaskStop tool."""
+
+    task_id: str = Field(description="The task ID to cancel")
+
+
 # Runtime Types
+
+
+@dataclass(frozen=True)
+class SubagentResult:
+    """Result returned by a :class:`SubagentRunner` after executing a subagent.
+
+    Attributes:
+        output: The text output produced by the subagent.
+        messages: Full message history from the subagent conversation.
+    """
+
+    output: str
+    messages: list[Any]
+
+
+@runtime_checkable
+class SubagentRunner(Protocol):
+    """Protocol for executing subagents.
+
+    Any object that implements :meth:`get_definition` and :meth:`run`
+    can serve as a runner for the Agent tool.  The concrete
+    LangChain-based implementation lives in
+    :class:`~openagent.langchain.subagent.LangChainSubagentRunner`.
+    """
+
+    def get_definition(self, subagent_type: str) -> AgentDefinition | None:
+        """Look up an agent definition by type name."""
+        ...
+
+    async def run(
+        self,
+        definition: AgentDefinition | None,
+        prompt: str,
+        prior_messages: list[Any] | None = None,
+        *,
+        task_id: str = "",
+    ) -> SubagentResult:
+        """Execute a subagent and return its result.
+
+        Args:
+            definition: Agent type spec, or ``None`` for general-purpose.
+            prompt: The task prompt for the subagent.
+            prior_messages: Conversation history for resume.
+            task_id: Unique task identifier.
+
+        Returns:
+            SubagentResult with output text and full message history.
+        """
+        ...
 
 
 class CompletionModel:
@@ -476,6 +581,16 @@ class SkillCatalog(Protocol):
     async def has(self, name: str) -> bool:
         """Return True if *name* is a known skill, re-discovering if needed."""
         ...
+
+
+ApprovalCallback = Callable[
+    [str, dict[str, Any], str | None],
+    Awaitable[bool],
+]
+"""Callback for human-in-the-loop approval.
+
+Signature: ``(tool_name, tool_args, approval_prompt) -> approved``.
+"""
 
 
 @dataclass(frozen=True)
@@ -565,27 +680,34 @@ Discriminated by the ``type`` key:
 
 @dataclass(frozen=True)
 class AgentContext:
-    """Frozen snapshot of agent capabilities and session state.
+    """Frozen snapshot of agent identity and capabilities.
 
-    Created at session boundaries (new conversation, resumed session,
-    or reminder evaluation). Immutable — represents a point-in-time
-    snapshot, not live state.
+    The single canonical context for prompt composition, reminder evaluation,
+    and middleware state. Carries a ``ModelProfile`` (not just a name string)
+    so consumers can access ``model.name`` and ``model.compaction_threshold``.
 
     Attributes:
-        model_name: Model name string (e.g. ``"gpt-5.2"``).
+        model: The model profile for this agent.
         tools: Currently registered tools.
         skills: Currently registered skills.
         mcps: Connected MCP clients.
         environment: Detected runtime environment, if available.
         git: Git repository snapshot, if available.
+        agents: Registered subagent definitions.
     """
 
-    model_name: str = ""
+    model: ModelProfile
     tools: list[BaseAgentTool[Any]] = field(default_factory=list)
     skills: list[Skill] = field(default_factory=list)
     mcps: list[McpClient] = field(default_factory=list)
     environment: EnvironmentContext | None = None
     git: GitContext | None = None
+    agents: dict[str, AgentDefinition] = field(default_factory=dict)
+
+    @property
+    def model_name(self) -> str:
+        """Model name string, delegated to ``model.name``."""
+        return self.model.name
 
     @property
     def tool_name_vars(self) -> dict[str, str]:

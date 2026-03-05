@@ -8,8 +8,7 @@ from typing import TYPE_CHECKING, Protocol, Self, runtime_checkable
 if TYPE_CHECKING:
     from openagent.types import CLIResult
 
-# Timeout constants for command execution
-BASH_DEFAULT_TIMEOUT_MS = 120000  # 2 minutes
+# Safety cap for command execution timeout
 BASH_MAX_TIMEOUT_MS = 600000  # 10 minutes
 
 

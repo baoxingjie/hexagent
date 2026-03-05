@@ -495,8 +495,8 @@ class TestRun:
             await computer.run("echo hello")
 
     @pytest.mark.usefixtures("mock_env")
-    async def test_run_uses_default_timeout(self, mock_sandbox: MagicMock, mock_e2b_module: MagicMock) -> None:
-        """Test run() uses default timeout when not specified."""
+    async def test_run_no_timeout_omits_kwarg(self, mock_sandbox: MagicMock, mock_e2b_module: MagicMock) -> None:
+        """Test run() with no timeout omits timeout kwarg to E2B."""
         computer = RemoteE2BComputer()
         computer._sandbox = mock_sandbox
         computer._is_paused = False
@@ -504,8 +504,8 @@ class TestRun:
         with patch.dict(sys.modules, {"e2b": mock_e2b_module}):
             await computer.run("echo hello")
 
-            # Default is 120000ms = 120s
-            mock_sandbox.commands.run.assert_called_once_with("echo hello", timeout=120)
+            # timeout=None means no timeout → kwarg omitted
+            mock_sandbox.commands.run.assert_called_once_with("echo hello")
 
     @pytest.mark.usefixtures("mock_env")
     async def test_run_respects_timeout_parameter(self, mock_sandbox: MagicMock, mock_e2b_module: MagicMock) -> None:

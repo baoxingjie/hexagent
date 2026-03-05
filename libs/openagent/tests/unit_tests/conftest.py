@@ -3,11 +3,23 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import MagicMock
 
 from pydantic import BaseModel
 
+from openagent.harness.model import ModelProfile
 from openagent.tools.base import BaseAgentTool
 from openagent.types import ToolResult
+
+
+def _stub_model() -> MagicMock:
+    mock = MagicMock()
+    mock.model_name = "stub-model"
+    return mock
+
+
+STUB_PROFILE = ModelProfile(model=_stub_model(), compaction_threshold=100_000)
+"""Reusable ModelProfile for tests that don't care about model identity."""
 
 
 class StubParams(BaseModel):

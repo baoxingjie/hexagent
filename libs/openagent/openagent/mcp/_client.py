@@ -77,9 +77,7 @@ class McpClient:
 
     def __repr__(self) -> str:
         """Return a string representation of the client."""
-        if self.is_connected:
-            return f"McpClient('{self.name}', {len(self._tools)} tools)"
-        return f"McpClient('{self.name}', disconnected)"
+        return f"McpClient(name={self._name!r}, tools={self._tools!r}, connected={self.is_connected})"
 
     # --- Async context manager ---
 

@@ -18,7 +18,7 @@ from openagent.types import (
     ToolResult,
 )
 
-from .conftest import make_tool
+from .conftest import STUB_PROFILE, make_tool
 
 
 def _make_mcp_client(name: str, instructions: str = "") -> McpClient:
@@ -232,16 +232,21 @@ class TestAgentContext:
     """Tests for AgentContext — the context snapshot dataclass."""
 
     def test_defaults_to_empty(self) -> None:
-        ctx = AgentContext()
+        ctx = AgentContext(model=STUB_PROFILE)
         assert ctx.tools == []
         assert ctx.skills == []
         assert ctx.mcps == []
         assert ctx.environment is None
         assert ctx.git is None
 
+    def test_model_name_delegates_to_profile(self) -> None:
+        ctx = AgentContext(model=STUB_PROFILE)
+        assert ctx.model_name == STUB_PROFILE.name
+
     def test_full_construction(self) -> None:
         git = GitContext(current_branch="feat", main_branch="main", status="clean", recent_commits="abc")
         ctx = AgentContext(
+            model=STUB_PROFILE,
             tools=[make_tool("Bash")],
             skills=[Skill(name="commit", description="desc", path="/p")],
             mcps=[_make_mcp_client("gh", "GitHub API")],
@@ -260,11 +265,11 @@ class TestAgentContext:
         assert ctx.git is not None
 
     def test_tool_name_vars_builds_dict_from_tools(self) -> None:
-        ctx = AgentContext(tools=[make_tool("Bash"), make_tool("Read")])
+        ctx = AgentContext(model=STUB_PROFILE, tools=[make_tool("Bash"), make_tool("Read")])
         assert ctx.tool_name_vars == {"BASH_TOOL_NAME": "Bash", "READ_TOOL_NAME": "Read"}
 
     def test_tool_name_vars_empty_without_tools(self) -> None:
-        assert AgentContext().tool_name_vars == {}
+        assert AgentContext(model=STUB_PROFILE).tool_name_vars == {}
 
 
 class TestSkillCatalog:

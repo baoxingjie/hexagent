@@ -48,3 +48,12 @@ class TestModelProfile:
     def test_no_derivation_without_context_window(self) -> None:
         profile = ModelProfile(model=_stub_model())
         assert profile.compaction_threshold is None
+
+    def test_name_returns_model_name_attribute(self) -> None:
+        profile = ModelProfile(model=_stub_model("gpt-5.2"))
+        assert profile.name == "gpt-5.2"
+
+    def test_name_falls_back_to_class_name(self) -> None:
+        mock = MagicMock(spec=[])  # No model_name attribute
+        profile = ModelProfile(model=mock)
+        assert profile.name == "MagicMock"

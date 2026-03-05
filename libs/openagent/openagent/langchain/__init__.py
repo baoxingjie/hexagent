@@ -10,13 +10,16 @@ Main exports:
 - Agent: OpenAgent agent with managed resources
 - create_agent: Create an OpenAgent agent using LangChain
 - to_langchain_tool: Convert BaseAgentTool to LangChain StructuredTool
+- LangChainSubagentRunner: Executes subagents with isolated context
 """
 
 from openagent.langchain.adapter import to_langchain_tool
 from openagent.langchain.agent import Agent, create_agent
+from openagent.langchain.subagent import LangChainSubagentRunner
 
 __all__ = [
     "Agent",
+    "LangChainSubagentRunner",
     "create_agent",
     "to_langchain_tool",
 ]

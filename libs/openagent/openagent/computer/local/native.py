@@ -6,12 +6,13 @@ Each command spawns a new process. No state persists between commands.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
+import signal
 import sys
 import time
 
 from openagent.computer.base import (
-    BASH_DEFAULT_TIMEOUT_MS,
     BASH_MAX_TIMEOUT_MS,
     AsyncComputerMixin,
     Computer,
@@ -47,32 +48,43 @@ class LocalNativeComputer(AsyncComputerMixin):
         *,
         timeout: float | None = None,  # noqa: ASYNC109
     ) -> CLIResult:
-        """Execute a command in a new subprocess."""
-        timeout_ms = timeout if timeout is not None else BASH_DEFAULT_TIMEOUT_MS
-        timeout_ms = min(timeout_ms, BASH_MAX_TIMEOUT_MS)
-        effective_timeout = timeout_ms / 1000
-        start_time = time.monotonic()
+        """Execute a command in a new subprocess.
 
+        Args:
+            command: Shell command to execute.
+            timeout: Command timeout in milliseconds. ``None`` means no timeout
+                (block until the process exits or the task is cancelled).
+                When specified, capped at ``BASH_MAX_TIMEOUT_MS``.
+        """
         env = os.environ.copy()
         env["NO_COLOR"] = "1"
+        start_time = time.monotonic()
 
         process = await asyncio.create_subprocess_shell(
             command,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
+            start_new_session=True,
         )
 
         try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                process.communicate(),
-                timeout=effective_timeout,
-            )
+            if timeout is None:
+                stdout_bytes, stderr_bytes = await process.communicate()
+            else:
+                effective_timeout = min(timeout, BASH_MAX_TIMEOUT_MS) / 1000
+                stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=effective_timeout,
+                )
         except TimeoutError:
-            process.kill()
-            await process.wait()
+            await self._kill_process_group(process)
             msg = f"timed out after {effective_timeout}s"
             raise CLIError(msg) from None
+        except asyncio.CancelledError:
+            await self._kill_process_group(process)
+            raise
 
         stdout = stdout_bytes.decode("utf-8", errors="replace").removesuffix("\n")
         stderr = stderr_bytes.decode("utf-8", errors="replace").removesuffix("\n")
@@ -83,6 +95,19 @@ class LocalNativeComputer(AsyncComputerMixin):
             exit_code=process.returncode or 0,
             metadata=ExecutionMetadata(duration_ms=int((time.monotonic() - start_time) * 1000)),
         )
+
+    @staticmethod
+    async def _kill_process_group(process: asyncio.subprocess.Process) -> None:
+        """Kill the process group with SIGTERM, then SIGKILL if needed."""
+        pid = process.pid
+        with contextlib.suppress(OSError):
+            os.killpg(pid, signal.SIGTERM)
+        try:
+            await asyncio.wait_for(process.wait(), timeout=5.0)
+        except TimeoutError:
+            with contextlib.suppress(OSError):
+                os.killpg(pid, signal.SIGKILL)
+            await process.wait()
 
 
 _: type[Computer] = LocalNativeComputer

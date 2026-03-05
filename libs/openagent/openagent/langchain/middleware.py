@@ -3,14 +3,15 @@
 This middleware coordinates compaction, permission gating, skill injection,
 and system reminder rules within LangChain's agent infrastructure.
 
-Compaction logic is inlined (no separate controller class). The three-group
-pre-model pipeline runs: intercepts -> appenders -> annotators.
+Compaction logic is inlined (no separate controller class). The pre-model
+pipeline runs: intercepts -> appenders -> annotators.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, NotRequired, Protocol
+from dataclasses import replace
+from typing import TYPE_CHECKING, Any, NotRequired
 
 from langchain.agents.middleware.types import (
     AgentMiddleware as LangChainAgentMiddleware,
@@ -31,11 +32,11 @@ from langchain_core.messages import (
 from langgraph.types import Command as LangGraphCommand
 from langgraph.types import Overwrite as LangGraphOverwrite
 
-from openagent.harness import PermissionGate, PermissionResult, Reminder, evaluate_reminders
+from openagent.harness import PermissionResult, evaluate_reminders
 from openagent.langchain.adapter import to_langchain_tool
-from openagent.prompts import RESUMED_SESSION, compose, load, substitute
+from openagent.prompts import compose, load, substitute
 from openagent.prompts.tags import SYSTEM_REMINDER_TAG
-from openagent.types import AgentContext, CompactionPhase, EnvironmentContext
+from openagent.types import AgentContext, CompactionPhase
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Sequence
@@ -44,47 +45,13 @@ if TYPE_CHECKING:
     from langgraph.runtime import Runtime
 
     from openagent.harness.environment import EnvironmentResolver
-    from openagent.harness.model import ModelProfile
+    from openagent.harness.permission import PermissionGate
+    from openagent.harness.reminders import Reminder
     from openagent.harness.skills import SkillResolver
-    from openagent.mcp import McpClient
-    from openagent.tools.base import BaseAgentTool
-    from openagent.types import Skill
+    from openagent.prompts import SectionFn
+    from openagent.types import ApprovalCallback, EnvironmentContext, Skill
 
 logger = logging.getLogger(__name__)
-
-
-class ApprovalCallback(Protocol):
-    """Callback for human-in-the-loop approval of tool calls.
-
-    Examples:
-        ```python
-        async def cli_approval(
-            tool_name: str,
-            tool_args: dict[str, Any],
-            approval_prompt: str | None,
-        ) -> bool:
-            response = input(f"Allow {tool_name}? [y/n]: ")
-            return response.lower() == "y"
-        ```
-    """
-
-    async def __call__(
-        self,
-        tool_name: str,
-        tool_args: dict[str, Any],
-        approval_prompt: str | None,
-    ) -> bool:
-        """Request approval for a tool call.
-
-        Args:
-            tool_name: Name of the tool requesting approval.
-            tool_args: Arguments passed to the tool.
-            approval_prompt: Optional prompt describing why approval is needed.
-
-        Returns:
-            True if approved, False if denied.
-        """
-        ...
 
 
 # Minimum messages required before compaction can trigger.
@@ -178,7 +145,7 @@ class AgentMiddleware(LangChainAgentMiddleware):
     - Reminder rules (annotators)
     - Permission gating (tool call wrapper)
 
-    Pre-model pipeline runs three ordered groups:
+    Pre-model pipeline runs ordered groups:
     1. Intercepts: compaction phases (may abort normal processing)
     2. Appenders: skill injection (adds messages)
     3. Annotators: reminder rules (injects into last message)
@@ -189,47 +156,41 @@ class AgentMiddleware(LangChainAgentMiddleware):
     def __init__(
         self,
         *,
-        model: ModelProfile,
-        tools: Sequence[BaseAgentTool[Any]],
+        context: AgentContext,
         system_prompt: str,
         permission_gate: PermissionGate,
-        environment: EnvironmentContext | None = None,
+        approval_callback: ApprovalCallback | None = None,
         environment_resolver: EnvironmentResolver | None = None,
-        skills: Sequence[Skill] = (),
-        mcps: Sequence[McpClient] = (),
         skill_resolver: SkillResolver | None = None,
         reminders: Sequence[Reminder] = (),
-        approval_callback: ApprovalCallback | None = None,
+        prompt_profile: Sequence[SectionFn] | None = None,
+        custom_prompt: str = "",
     ) -> None:
         """Initialize the middleware.
 
         Args:
-            model: The main model profile.  The middleware extracts
-                ``compaction_threshold`` from it.
-            tools: Agent tools (framework-agnostic).
+            context: Frozen agent context snapshot.
             system_prompt: Assembled system prompt for first-turn injection.
-            permission_gate: Gate for validating tool calls.
-            environment: Initial resolved environment snapshot.
-            environment_resolver: Resolver for re-detecting environment
-                on compaction rebuild.  When provided, ``_rebuild_after_compaction``
-                re-resolves live values (e.g. ``TODAY_DATE``).
-            skills: Discovered skills.
-            mcps: Connected MCP clients.
-            skill_resolver: Optional resolver for injecting skill content.
+            permission_gate: Permission checking for tool calls.
+            approval_callback: Human-in-the-loop approval callback.
+            environment_resolver: Resolves runtime environment on compaction.
+            skill_resolver: Resolves skills for injection and compaction.
             reminders: Reminder rules for dynamic system-reminder injection.
-            approval_callback: Optional callback for human-in-the-loop approval.
+            prompt_profile: Which section profile to recompose on compaction
+                rebuild. ``None`` means fully custom prompt (no recomposition).
+            custom_prompt: Developer's custom prompt prefix (e.g.
+                ``definition.system_prompt`` for subagents). Prepended to
+                framework-composed sections on compaction rebuild.
         """
-        self._model = model
+        self._context = context
         self._system_prompt = system_prompt
-        self._tools = list(tools)
-        self._environment = environment
-        self._environment_resolver = environment_resolver
-        self._mcps = list(mcps)
-        self._skills = list(skills)
-        self._skill_resolver = skill_resolver
-        self._reminders = list(reminders)
         self._permission_gate = permission_gate
         self._approval_callback = approval_callback
+        self._environment_resolver = environment_resolver
+        self._skill_resolver = skill_resolver
+        self._reminders = list(reminders)
+        self._prompt_profile = prompt_profile
+        self._custom_prompt = custom_prompt
         self._compaction_prompt = load("user_prompt_compaction_request")
         self._summary_template = load("user_prompt_compaction_summary_rebuild")
         self._tools_cache: list[BaseTool] | None = None
@@ -238,7 +199,7 @@ class AgentMiddleware(LangChainAgentMiddleware):
     def tools(self) -> Sequence[BaseTool]:  # type: ignore[override]
         """Get tools as LangChain tools (cached)."""
         if self._tools_cache is None:
-            self._tools_cache = [to_langchain_tool(tool) for tool in self._tools]
+            self._tools_cache = [to_langchain_tool(tool) for tool in self._context.tools]
         return self._tools_cache
 
     @staticmethod
@@ -258,31 +219,42 @@ class AgentMiddleware(LangChainAgentMiddleware):
     async def _rebuild_after_compaction(self, summary: str) -> list[BaseMessage]:
         """Rebuild messages after compaction.
 
-        1. Re-resolves environment from the computer (live snapshot)
-        2. Re-discovers skills from filesystem (live snapshot)
-        3. Composes fresh system prompt using RESUMED_SESSION profile
-        4. Returns [SystemMessage(new_prompt), HumanMessage(summary)]
+        Three cases based on ``prompt_profile``:
+        - ``None`` → fully custom prompt, no recomposition
+        - ``custom_prompt`` non-empty → prepend to framework sections (subagent)
+        - Both empty/default → pure framework recomposition (root)
         """
-        if self._environment_resolver is not None:
-            self._environment = await self._environment_resolver.resolve()
-
-        current_skills: list[Skill] = []
-        if self._skill_resolver is not None:
-            current_skills = await self._skill_resolver.discover()
-
-        model_name = getattr(self._model.model, "model_name", type(self._model.model).__name__)
-        ctx = AgentContext(
-            model_name=model_name,
-            tools=self._tools,
-            skills=current_skills,
-            mcps=self._mcps,
-            environment=self._environment,
-        )
-        new_system_prompt = compose(RESUMED_SESSION, ctx)
         summary_content = substitute(self._summary_template, SUMMARY_CONTENT=summary)
 
+        # Case: fully custom prompt — no recomposition
+        if self._prompt_profile is None:
+            return [
+                SystemMessage(content=self._system_prompt),
+                HumanMessage(content=summary_content),
+            ]
+
+        # Cases: root (no custom) or subagent — recompose framework sections
+        env: EnvironmentContext | None
+        if self._environment_resolver is not None:
+            env = await self._environment_resolver.resolve()
+        else:
+            env = self._context.environment
+
+        if self._skill_resolver is not None:
+            skills: list[Skill] = await self._skill_resolver.discover()
+        else:
+            skills = list(self._context.skills)
+
+        self._context = replace(self._context, environment=env, skills=skills)
+        framework_prompt = compose(self._prompt_profile, self._context)
+
+        if self._custom_prompt:
+            self._system_prompt = f"{self._custom_prompt}\n\n{framework_prompt}"
+        else:
+            self._system_prompt = framework_prompt
+
         return [
-            SystemMessage(content=new_system_prompt),
+            SystemMessage(content=self._system_prompt),
             HumanMessage(content=summary_content),
         ]
 
@@ -308,7 +280,7 @@ class AgentMiddleware(LangChainAgentMiddleware):
         state: AgentState,
         _runtime: Runtime[Any] | None = None,
     ) -> dict[str, Any] | None:
-        """Three-group pre-model pipeline.
+        """Pre-model pipeline.
 
         Group 1: Intercepts (compaction phases, early exit).
         Group 2: Appenders (skill injection).
@@ -361,22 +333,18 @@ class AgentMiddleware(LangChainAgentMiddleware):
         # --- GROUP 3: Annotators (system reminders) ---
         if self._reminders:
             openai_msgs = convert_to_openai_messages(messages)
-            model_name = getattr(self._model.model, "model_name", type(self._model.model).__name__)
-            ctx = AgentContext(
-                model_name=model_name,
-                tools=self._tools,
-                skills=self._skills,
-                mcps=self._mcps,
-                environment=self._environment,
+            prepends, appends = evaluate_reminders(
+                self._reminders,
+                openai_msgs,
+                self._context,
             )
-            prepends, appends = evaluate_reminders(self._reminders, openai_msgs, ctx)
 
             if prepends or appends:
                 last_msg = messages[-1]
                 content_str = _extract_text_content(last_msg.content)
 
-                parts = [*prepends, content_str, *appends]
-                new_content = "\n\n".join(part for part in parts if part)
+                reminder_parts = [*prepends, content_str, *appends]
+                new_content = "\n\n".join(part for part in reminder_parts if part)
 
                 patched = [*messages[:-1], _rebuild_message(last_msg, new_content)]
                 return {
@@ -398,7 +366,7 @@ class AgentMiddleware(LangChainAgentMiddleware):
         # Trigger compaction if threshold exceeded
         if phase == CompactionPhase.NONE and len(messages) >= _MIN_MESSAGES_FOR_COMPACTION:
             token_count = self._get_total_tokens(messages)
-            threshold = self._model.compaction_threshold
+            threshold = self._context.model.compaction_threshold
             assert threshold is not None  # noqa: S101  # guaranteed by _resolve_to_profile
             if token_count is not None and token_count >= threshold:
                 return {"compaction_phase": CompactionPhase.REQUESTING, "jump_to": "model"}

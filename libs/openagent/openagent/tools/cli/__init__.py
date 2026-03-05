@@ -30,29 +30,21 @@ from openagent.tools.cli.write import WriteTool
 
 if TYPE_CHECKING:
     from openagent.computer import Computer
+    from openagent.tasks import TaskRegistry
     from openagent.tools.base import BaseAgentTool
 
 
-def create_bash_tool(computer: Computer) -> BashTool:
+def create_bash_tool(computer: Computer, registry: TaskRegistry) -> BashTool:
     """Create a bash tool for executing shell commands.
 
     Args:
         computer: The Computer instance to execute commands on.
+        registry: Task registry for background execution.
 
     Returns:
         BashTool instance.
-
-    Example:
-        ```python
-        from openagent.computer import LocalComputer
-        from openagent.tools.cli import create_bash_tool
-
-        computer = LocalComputer()
-        bash = create_bash_tool(computer)
-        result = await bash(command="echo hello")
-        ```
     """
-    return BashTool(computer)
+    return BashTool(computer, registry)
 
 
 def create_filesystem_tools(computer: Computer) -> list[BaseAgentTool[Any]]:
@@ -90,34 +82,20 @@ def create_filesystem_tools(computer: Computer) -> list[BaseAgentTool[Any]]:
     ]
 
 
-def create_cli_tools(computer: Computer) -> list[BaseAgentTool[Any]]:
+def create_cli_tools(computer: Computer, registry: TaskRegistry) -> list[BaseAgentTool[Any]]:
     """Create all CLI tools sharing a single Computer instance.
 
     Convenience function that combines create_bash_tool and create_filesystem_tools.
-    Creates a complete set of tools (bash, read, write, edit, glob, grep)
-    that operate on the provided Computer.
 
     Args:
         computer: The Computer instance all tools will share.
+        registry: Task registry for background bash execution.
 
     Returns:
         List of tool instances:
         [BashTool, ReadTool, WriteTool, EditTool, GlobTool, GrepTool]
-
-    Example:
-        ```python
-        from openagent.computer import LocalComputer
-        from openagent.tools.cli import create_cli_tools
-
-        computer = LocalComputer()
-        tools = create_cli_tools(computer)
-
-        # Use individual tools
-        bash_tool = tools[0]
-        result = await bash_tool(command="echo hello")
-        ```
     """
-    return [create_bash_tool(computer), *create_filesystem_tools(computer)]
+    return [create_bash_tool(computer, registry), *create_filesystem_tools(computer)]
 
 
 __all__ = [

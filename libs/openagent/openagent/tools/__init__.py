@@ -45,10 +45,14 @@ from openagent.tools.cli import (
     create_filesystem_tools,
 )
 from openagent.tools.skill import SkillTool
+from openagent.tools.task import TaskOutputTool, TaskStopTool
+from openagent.tools.task.agent import AgentTool
 from openagent.tools.web import (
     WebFetchTool,
     WebSearchTool,
+    create_web_tools,
 )
+from openagent.types import SubagentResult, SubagentRunner
 
 BUILTIN_TOOLS: tuple[type[BaseAgentTool[Any]], ...] = (
     BashTool,
@@ -66,10 +70,16 @@ BUILTIN_TOOLS: tuple[type[BaseAgentTool[Any]], ...] = (
 OpenAgent always has a computer — these tools are non-negotiable.
 Everything that needs to know "what tools exist" derives from this
 tuple (template variables, prompt fragment lookup, etc.).
+
+Note: AgentTool lives in ``tools/task/agent.py`` and depends on the
+:class:`~openagent.types.SubagentRunner` protocol. TaskOutputTool and
+TaskStopTool live in ``tools/task/`` and are assembled alongside AgentTool
+by the agent factory.
 """
 
 __all__ = [
     "BUILTIN_TOOLS",
+    "AgentTool",
     "BaseAgentTool",
     "BashTool",
     "EditTool",
@@ -77,10 +87,15 @@ __all__ = [
     "GrepTool",
     "ReadTool",
     "SkillTool",
+    "SubagentResult",
+    "SubagentRunner",
+    "TaskOutputTool",
+    "TaskStopTool",
     "WebFetchTool",
     "WebSearchTool",
     "WriteTool",
     "create_bash_tool",
     "create_cli_tools",
     "create_filesystem_tools",
+    "create_web_tools",
 ]

@@ -30,7 +30,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from openagent.computer.base import (
-    BASH_DEFAULT_TIMEOUT_MS,
     BASH_MAX_TIMEOUT_MS,
     AsyncComputerMixin,
     Computer,
@@ -270,9 +269,12 @@ class RemoteE2BComputer(AsyncComputerMixin):
             msg = "Failed to start sandbox"
             raise CLIError(msg)
 
-        # Calculate effective timeout
-        timeout_ms = timeout if timeout is not None else BASH_DEFAULT_TIMEOUT_MS
-        timeout_ms = min(timeout_ms, BASH_MAX_TIMEOUT_MS)
+        # Calculate effective timeout.
+        # For unbounded commands (timeout=None), use BASH_MAX_TIMEOUT_MS as a
+        # best-effort runway for _ensure_sandbox_ready, but omit the timeout
+        # kwarg from the actual E2B commands.run() call.
+        bounded = timeout is not None
+        timeout_ms = min(timeout, BASH_MAX_TIMEOUT_MS) if timeout is not None else BASH_MAX_TIMEOUT_MS
         effective_timeout_s = timeout_ms / 1000
 
         # Ensure sandbox has enough time remaining
@@ -288,9 +290,12 @@ class RemoteE2BComputer(AsyncComputerMixin):
         from e2b import CommandExitException
 
         try:
+            run_kwargs: dict[str, int] = {}
+            if bounded:
+                run_kwargs["timeout"] = int(effective_timeout_s)
             result = await self._sandbox.commands.run(
                 command,
-                timeout=int(effective_timeout_s),
+                **run_kwargs,
             )
             stdout = result.stdout or ""
             stderr = result.stderr or ""

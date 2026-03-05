@@ -102,11 +102,13 @@ class TestMcpClientLifecycle:
         client = McpClient("test-server", _http_config())
         with patch.object(McpClient, "_open_session", return_value=session):
             async with client:
-                assert repr(client) == "McpClient('test-server', 1 tools)"
+                r = repr(client)
+                assert r.startswith("McpClient(name='test-server', tools=[McpTool(")
+                assert r.endswith("], connected=True)")
 
     async def test_repr_disconnected(self) -> None:
         client = McpClient("test-server", _http_config())
-        assert repr(client) == "McpClient('test-server', disconnected)"
+        assert repr(client) == "McpClient(name='test-server', tools=[], connected=False)"
 
     async def test_name_property(self) -> None:
         client = McpClient("my-server", _http_config())
