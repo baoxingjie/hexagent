@@ -1,8 +1,8 @@
 """Prompt content loading.
 
-Read-only loader for .md fragment files from the ``prompts/`` package
-directory via ``importlib.resources`` for wheel compatibility.  Keys are
-derived from filenames: ``system_prompt_identity.md`` →
+Read-only loader for .md fragment files from the ``prompts/fragments/``
+sub-package via ``importlib.resources`` for wheel compatibility.  Keys
+are derived from filenames: ``system_prompt_identity.md`` →
 ``"system_prompt_identity"``.
 
 This module has no mutable state.  All results are cached for the
@@ -21,7 +21,7 @@ _PLACEHOLDER_RE = re.compile(r"\$\{([A-Z][A-Z0-9_]*)\}")
 @functools.cache
 def _scan_package_keys() -> frozenset[str]:
     """Discover all .md fragment keys in the package."""
-    package = importlib.resources.files("openagent.prompts")
+    package = importlib.resources.files("openagent.prompts.fragments")
     keys: set[str] = set()
     for item in package.iterdir():
         if item.is_file() and item.name.endswith(".md"):
@@ -45,7 +45,7 @@ def load(key: str) -> str:
     Raises:
         KeyError: If no fragment with the given key exists.
     """
-    package = importlib.resources.files("openagent.prompts")
+    package = importlib.resources.files("openagent.prompts.fragments")
     resource = package.joinpath(f"{key}.md")
     try:
         return resource.read_text(encoding="utf-8").strip()
