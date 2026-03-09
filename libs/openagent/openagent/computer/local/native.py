@@ -8,9 +8,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import shutil
 import signal
 import sys
 import time
+from pathlib import Path
 
 from openagent.computer.base import (
     BASH_MAX_TIMEOUT_MS,
@@ -41,6 +43,33 @@ class LocalNativeComputer(AsyncComputerMixin):
 
     async def stop(self) -> None:
         """No-op for protocol compliance."""
+
+    async def upload(self, src: str, dst: str) -> None:
+        """Copy a host file into the computer (same filesystem)."""
+        self._copy_file(src, dst)
+
+    async def download(self, src: str, dst: str) -> None:
+        """Copy a file from the computer to the host (same filesystem)."""
+        self._copy_file(src, dst)
+
+    @staticmethod
+    def _copy_file(src: str, dst: str) -> None:
+        """Copy a single file, creating parent directories as needed."""
+        src_path = Path(src)
+        if not src_path.exists():
+            msg = f"Source file not found: {src}"
+            raise FileNotFoundError(msg)
+        if not src_path.is_file():
+            msg = f"Source is not a file: {src}"
+            raise CLIError(msg)
+
+        Path(dst).parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            shutil.copy2(src, dst)
+        except OSError as e:
+            msg = f"Failed to copy {src} to {dst}: {e}"
+            raise CLIError(msg) from e
 
     async def run(
         self,

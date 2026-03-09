@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from typing import TYPE_CHECKING
 from unittest.mock import patch
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 import pytest
 
@@ -285,6 +289,76 @@ class TestCancelledError:
         # ProcessLookupError if the process doesn't exist. We can't easily
         # get the PID in a cancelled scenario, but the test passing without
         # hanging confirms children are killed (they'd keep the wait alive).
+
+
+class TestUpload:
+    """Tests for upload()."""
+
+    async def test_upload_copies_file(self, tmp_path: Path) -> None:
+        """Upload copies file content."""
+        src = tmp_path / "src.txt"
+        src.write_text("hello")
+        dst = tmp_path / "dst.txt"
+
+        computer = LocalNativeComputer()
+        await computer.upload(str(src), str(dst))
+
+        assert dst.read_text() == "hello"
+
+    async def test_upload_creates_parent_dirs(self, tmp_path: Path) -> None:
+        """Upload creates missing parent directories."""
+        src = tmp_path / "src.txt"
+        src.write_text("data")
+        dst = tmp_path / "a" / "b" / "dst.txt"
+
+        computer = LocalNativeComputer()
+        await computer.upload(str(src), str(dst))
+
+        assert dst.read_text() == "data"
+
+    async def test_upload_missing_src_raises_file_not_found(self, tmp_path: Path) -> None:
+        """FileNotFoundError when source doesn't exist."""
+        computer = LocalNativeComputer()
+        with pytest.raises(FileNotFoundError, match="Source file not found"):
+            await computer.upload(str(tmp_path / "nope"), str(tmp_path / "dst"))
+
+    async def test_upload_directory_src_raises_cli_error(self, tmp_path: Path) -> None:
+        """CLIError when source is a directory."""
+        computer = LocalNativeComputer()
+        with pytest.raises(CLIError, match="not a file"):
+            await computer.upload(str(tmp_path), str(tmp_path / "dst"))
+
+
+class TestDownload:
+    """Tests for download()."""
+
+    async def test_download_copies_file(self, tmp_path: Path) -> None:
+        """Download copies file content."""
+        src = tmp_path / "src.txt"
+        src.write_text("world")
+        dst = tmp_path / "dst.txt"
+
+        computer = LocalNativeComputer()
+        await computer.download(str(src), str(dst))
+
+        assert dst.read_text() == "world"
+
+    async def test_download_creates_parent_dirs(self, tmp_path: Path) -> None:
+        """Download creates missing parent directories."""
+        src = tmp_path / "src.txt"
+        src.write_text("data")
+        dst = tmp_path / "x" / "y" / "dst.txt"
+
+        computer = LocalNativeComputer()
+        await computer.download(str(src), str(dst))
+
+        assert dst.read_text() == "data"
+
+    async def test_download_missing_src_raises_file_not_found(self, tmp_path: Path) -> None:
+        """FileNotFoundError when source doesn't exist."""
+        computer = LocalNativeComputer()
+        with pytest.raises(FileNotFoundError, match="Source file not found"):
+            await computer.download(str(tmp_path / "nope"), str(tmp_path / "dst"))
 
 
 class TestProtocolCompliance:

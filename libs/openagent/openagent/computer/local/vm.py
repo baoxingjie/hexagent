@@ -11,6 +11,7 @@ The VM backend is selected automatically based on the host platform:
 
 from __future__ import annotations
 
+import shlex
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -172,6 +173,46 @@ class LocalVMComputer(AsyncComputerMixin):
         if result.exit_code != 0:
             msg = f"Failed to create session user '{name}': {result.stderr}"
             raise VMError(msg)
+
+    async def upload(self, src: str, dst: str) -> None:
+        """Transfer a file from the host to the VM session.
+
+        Creates parent directories on the guest and sets ownership
+        to the session user.
+        """
+        if not self._started:
+            await self.start()
+
+        src_path = Path(src)
+        if not src_path.exists():
+            msg = f"Source file not found: {src}"
+            raise FileNotFoundError(msg)
+        if not src_path.is_file():
+            msg = f"Source is not a file: {src}"
+            raise CLIError(msg)
+
+        dst_parent = str(Path(dst).parent)
+        try:
+            await self._vm.shell(f"sudo mkdir -p {shlex.quote(dst_parent)}")
+            await self._vm.copy(src, dst, host_to_guest=True)
+            await self._vm.shell(f"sudo chown {self._session_name} {shlex.quote(dst)}")
+        except VMError as e:
+            raise CLIError(str(e)) from e
+
+    async def download(self, src: str, dst: str) -> None:
+        """Transfer a file from the VM session to the host.
+
+        Creates parent directories on the host.
+        """
+        if not self._started:
+            await self.start()
+
+        Path(dst).parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            await self._vm.copy(src, dst, host_to_guest=False)
+        except VMError as e:
+            raise CLIError(str(e)) from e
 
     async def run(
         self,

@@ -27,6 +27,7 @@ import logging
 import os
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from openagent.computer.base import (
@@ -239,6 +240,48 @@ class RemoteE2BComputer(AsyncComputerMixin):
 
         self._sandbox_id = None
         self._is_paused = False
+
+    async def upload(self, src: str, dst: str) -> None:
+        """Transfer a file from the host to the E2B sandbox."""
+        if self._sandbox is None or self._is_paused:
+            await self.start()
+        if self._sandbox is None or self._is_paused:
+            msg = "Failed to start sandbox"
+            raise CLIError(msg)
+
+        src_path = Path(src)
+        if not src_path.exists():
+            msg = f"Source file not found: {src}"
+            raise FileNotFoundError(msg)
+        if not src_path.is_file():
+            msg = f"Source is not a file: {src}"
+            raise CLIError(msg)
+
+        try:
+            await self._sandbox.files.write(dst, src_path.read_bytes())
+        except (FileNotFoundError, CLIError):
+            raise
+        except Exception as e:
+            msg = f"Failed to upload {src} to sandbox: {e}"
+            raise CLIError(msg) from e
+
+    async def download(self, src: str, dst: str) -> None:
+        """Transfer a file from the E2B sandbox to the host."""
+        if self._sandbox is None or self._is_paused:
+            await self.start()
+        if self._sandbox is None or self._is_paused:
+            msg = "Failed to start sandbox"
+            raise CLIError(msg)
+
+        dst_path = Path(dst)
+        dst_path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            data = await self._sandbox.files.read(src)
+            dst_path.write_bytes(data)
+        except Exception as e:
+            msg = f"Failed to download {src} from sandbox: {e}"
+            raise CLIError(msg) from e
 
     async def run(
         self,

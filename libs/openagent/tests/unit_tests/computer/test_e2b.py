@@ -20,6 +20,7 @@ from openagent.exceptions import CLIError, ConfigurationError, MissingDependency
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+    from pathlib import Path
     from types import ModuleType
 
 # Test constants
@@ -661,6 +662,128 @@ class TestPauseAndResume:
             # State should be cleared
             assert computer._sandbox is None
             assert computer._sandbox_id is None
+
+
+class TestUpload:
+    """Tests for upload()."""
+
+    @pytest.mark.usefixtures("mock_env")
+    async def test_upload_writes_to_sandbox(self, mock_sandbox: MagicMock, mock_e2b_module: MagicMock, tmp_path: Path) -> None:
+        """Upload reads host file and writes to sandbox."""
+        computer = RemoteE2BComputer()
+        computer._sandbox = mock_sandbox
+        computer._is_paused = False
+
+        src = tmp_path / "file.txt"
+        src.write_bytes(b"content")
+
+        mock_sandbox.files = MagicMock()
+        mock_sandbox.files.write = AsyncMock()
+
+        with patch.dict(sys.modules, {"e2b": mock_e2b_module}):
+            await computer.upload(str(src), "/sandbox/file.txt")
+
+        mock_sandbox.files.write.assert_awaited_once_with("/sandbox/file.txt", b"content")
+
+    @pytest.mark.usefixtures("mock_env")
+    async def test_upload_auto_starts(self, mock_sandbox: MagicMock, mock_e2b_module: MagicMock, tmp_path: Path) -> None:
+        """Upload auto-starts sandbox if not running."""
+        computer = RemoteE2BComputer()
+
+        src = tmp_path / "file.txt"
+        src.write_bytes(b"data")
+
+        mock_sandbox.files = MagicMock()
+        mock_sandbox.files.write = AsyncMock()
+        mock_e2b_module.AsyncSandbox.create = AsyncMock(return_value=mock_sandbox)
+
+        with patch.dict(sys.modules, {"e2b": mock_e2b_module}):
+            await computer.upload(str(src), "/sandbox/file.txt")
+
+        mock_e2b_module.AsyncSandbox.create.assert_called_once()
+
+    @pytest.mark.usefixtures("mock_env")
+    async def test_upload_missing_src_raises_file_not_found(self, mock_sandbox: MagicMock, tmp_path: Path) -> None:
+        """FileNotFoundError for missing source."""
+        computer = RemoteE2BComputer()
+        computer._sandbox = mock_sandbox
+        computer._is_paused = False
+
+        with pytest.raises(FileNotFoundError, match="Source file not found"):
+            await computer.upload(str(tmp_path / "nope"), "/sandbox/file.txt")
+
+    @pytest.mark.usefixtures("mock_env")
+    async def test_upload_sdk_failure_raises_cli_error(self, mock_sandbox: MagicMock, mock_e2b_module: MagicMock, tmp_path: Path) -> None:
+        """CLIError when sandbox.files.write fails."""
+        computer = RemoteE2BComputer()
+        computer._sandbox = mock_sandbox
+        computer._is_paused = False
+
+        src = tmp_path / "file.txt"
+        src.write_bytes(b"data")
+
+        mock_sandbox.files = MagicMock()
+        mock_sandbox.files.write = AsyncMock(side_effect=Exception("SDK error"))
+
+        with (
+            patch.dict(sys.modules, {"e2b": mock_e2b_module}),
+            pytest.raises(CLIError, match="Failed to upload"),
+        ):
+            await computer.upload(str(src), "/sandbox/file.txt")
+
+
+class TestDownloadFile:
+    """Tests for download()."""
+
+    @pytest.mark.usefixtures("mock_env")
+    async def test_download_reads_from_sandbox(self, mock_sandbox: MagicMock, mock_e2b_module: MagicMock, tmp_path: Path) -> None:
+        """Download reads sandbox file and writes to host."""
+        computer = RemoteE2BComputer()
+        computer._sandbox = mock_sandbox
+        computer._is_paused = False
+
+        mock_sandbox.files = MagicMock()
+        mock_sandbox.files.read = AsyncMock(return_value=b"sandbox data")
+
+        dst = tmp_path / "out.txt"
+
+        with patch.dict(sys.modules, {"e2b": mock_e2b_module}):
+            await computer.download("/sandbox/file.txt", str(dst))
+
+        assert dst.read_bytes() == b"sandbox data"
+
+    @pytest.mark.usefixtures("mock_env")
+    async def test_download_creates_parent_dirs(self, mock_sandbox: MagicMock, mock_e2b_module: MagicMock, tmp_path: Path) -> None:
+        """Download creates parent directories on host."""
+        computer = RemoteE2BComputer()
+        computer._sandbox = mock_sandbox
+        computer._is_paused = False
+
+        mock_sandbox.files = MagicMock()
+        mock_sandbox.files.read = AsyncMock(return_value=b"data")
+
+        dst = tmp_path / "a" / "b" / "out.txt"
+
+        with patch.dict(sys.modules, {"e2b": mock_e2b_module}):
+            await computer.download("/sandbox/file.txt", str(dst))
+
+        assert dst.read_bytes() == b"data"
+
+    @pytest.mark.usefixtures("mock_env")
+    async def test_download_sdk_failure_raises_cli_error(self, mock_sandbox: MagicMock, mock_e2b_module: MagicMock, tmp_path: Path) -> None:
+        """CLIError when sandbox.files.read fails."""
+        computer = RemoteE2BComputer()
+        computer._sandbox = mock_sandbox
+        computer._is_paused = False
+
+        mock_sandbox.files = MagicMock()
+        mock_sandbox.files.read = AsyncMock(side_effect=Exception("SDK error"))
+
+        with (
+            patch.dict(sys.modules, {"e2b": mock_e2b_module}),
+            pytest.raises(CLIError, match="Failed to download"),
+        ):
+            await computer.download("/sandbox/file.txt", str(tmp_path / "out.txt"))
 
 
 class TestContextManager:

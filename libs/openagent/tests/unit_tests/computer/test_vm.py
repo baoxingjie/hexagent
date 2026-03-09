@@ -416,6 +416,146 @@ class TestListSessions:
         assert await computer.list_sessions() == []
 
 
+class TestUpload:
+    """Tests for upload()."""
+
+    async def test_upload_calls_vm_copy(self, tmp_path: Path) -> None:
+        """Upload calls vm.copy with host_to_guest=True."""
+        vm = _mock_vm()
+        vm.shell = AsyncMock(side_effect=[_fail(), _ok(), _ok(), _ok()])
+        vm.copy = AsyncMock()
+        computer = _make_computer(vm)
+
+        src = tmp_path / "file.txt"
+        src.write_text("data")
+
+        await computer.upload(str(src), "/remote/file.txt")
+
+        vm.copy.assert_awaited_once_with(str(src), "/remote/file.txt", host_to_guest=True)
+
+    async def test_upload_creates_parent_dir_on_guest(self, tmp_path: Path) -> None:
+        """Upload runs mkdir -p on the guest before copying."""
+        vm = _mock_vm()
+        vm.shell = AsyncMock(side_effect=[_fail(), _ok(), _ok(), _ok()])
+        vm.copy = AsyncMock()
+        computer = _make_computer(vm)
+
+        src = tmp_path / "file.txt"
+        src.write_text("data")
+
+        await computer.upload(str(src), "/remote/deep/file.txt")
+
+        # Third shell call (after id + useradd) should be mkdir -p
+        mkdir_call = vm.shell.call_args_list[2]
+        assert "mkdir -p" in mkdir_call.args[0]
+        assert "/remote/deep" in mkdir_call.args[0]
+
+    async def test_upload_chowns_to_session_user(self, tmp_path: Path) -> None:
+        """Upload chowns the file to the session user after copy."""
+        vm = _mock_vm()
+        vm.shell = AsyncMock(side_effect=[_fail(), _ok(), _ok(), _ok()])
+        vm.copy = AsyncMock()
+        computer = _make_computer(vm)
+
+        src = tmp_path / "file.txt"
+        src.write_text("data")
+
+        await computer.upload(str(src), "/remote/file.txt")
+
+        # Fourth shell call should be chown
+        chown_call = vm.shell.call_args_list[3]
+        assert "chown" in chown_call.args[0]
+        assert computer.session_name in chown_call.args[0]
+
+    async def test_upload_auto_starts(self, tmp_path: Path) -> None:
+        """Upload auto-starts if not running."""
+        vm = _mock_vm()
+        vm.shell = AsyncMock(side_effect=[_fail(), _ok(), _ok(), _ok()])
+        vm.copy = AsyncMock()
+        computer = _make_computer(vm)
+
+        src = tmp_path / "file.txt"
+        src.write_text("data")
+
+        assert not computer.is_running
+        await computer.upload(str(src), "/remote/file.txt")
+        assert computer.is_running
+
+    async def test_upload_missing_src_raises_file_not_found(self, tmp_path: Path) -> None:
+        """FileNotFoundError for missing source."""
+        vm = _mock_vm()
+        vm.shell = AsyncMock(side_effect=[_fail(), _ok()])
+        computer = _make_computer(vm)
+        await computer.start()
+
+        with pytest.raises(FileNotFoundError, match="Source file not found"):
+            await computer.upload(str(tmp_path / "nope"), "/remote/file.txt")
+
+    async def test_upload_translates_vm_error_to_cli_error(self, tmp_path: Path) -> None:
+        """VMError from copy is translated to CLIError."""
+        vm = _mock_vm()
+        vm.shell = AsyncMock(side_effect=[_fail(), _ok(), _ok()])
+        vm.copy = AsyncMock(side_effect=VMError("copy failed"))
+        computer = _make_computer(vm)
+
+        src = tmp_path / "file.txt"
+        src.write_text("data")
+
+        with pytest.raises(CLIError, match="copy failed"):
+            await computer.upload(str(src), "/remote/file.txt")
+
+
+class TestDownload:
+    """Tests for download()."""
+
+    async def test_download_calls_vm_copy(self, tmp_path: Path) -> None:
+        """Download calls vm.copy with host_to_guest=False."""
+        vm = _mock_vm()
+        vm.shell = AsyncMock(side_effect=[_fail(), _ok()])
+        vm.copy = AsyncMock()
+        computer = _make_computer(vm)
+
+        dst = tmp_path / "file.txt"
+
+        await computer.download("/remote/file.txt", str(dst))
+
+        vm.copy.assert_awaited_once_with("/remote/file.txt", str(dst), host_to_guest=False)
+
+    async def test_download_creates_parent_dirs_on_host(self, tmp_path: Path) -> None:
+        """Download creates parent directories on host side."""
+        vm = _mock_vm()
+        vm.shell = AsyncMock(side_effect=[_fail(), _ok()])
+        vm.copy = AsyncMock()
+        computer = _make_computer(vm)
+
+        dst = tmp_path / "a" / "b" / "file.txt"
+
+        await computer.download("/remote/file.txt", str(dst))
+
+        assert dst.parent.exists()
+
+    async def test_download_auto_starts(self, tmp_path: Path) -> None:
+        """Download auto-starts if not running."""
+        vm = _mock_vm()
+        vm.shell = AsyncMock(side_effect=[_fail(), _ok()])
+        vm.copy = AsyncMock()
+        computer = _make_computer(vm)
+
+        assert not computer.is_running
+        await computer.download("/remote/file.txt", str(tmp_path / "file.txt"))
+        assert computer.is_running
+
+    async def test_download_translates_vm_error_to_cli_error(self, tmp_path: Path) -> None:
+        """VMError from copy is translated to CLIError."""
+        vm = _mock_vm()
+        vm.shell = AsyncMock(side_effect=[_fail(), _ok()])
+        vm.copy = AsyncMock(side_effect=VMError("copy failed"))
+        computer = _make_computer(vm)
+
+        with pytest.raises(CLIError, match="copy failed"):
+            await computer.download("/remote/file.txt", str(tmp_path / "file.txt"))
+
+
 class TestContextManager:
     """Tests for async context manager."""
 
@@ -505,6 +645,44 @@ class TestBuildMountSetArg:
             ]
         )
         assert '"writable": false' in result
+
+
+class TestLimaVMCopy:
+    """Tests for LimaVM.copy()."""
+
+    async def _run_copy(self, *, host_to_guest: bool, returncode: int = 0, stderr: bytes = b"") -> list[str]:
+        """Call copy() and return the args passed to create_subprocess_exec."""
+        with (
+            patch.object(sys, "platform", "darwin"),
+            patch("shutil.which", return_value="/usr/bin/limactl"),
+        ):
+            vm = LimaVM(instance="test")
+
+        mock_proc = AsyncMock()
+        mock_proc.communicate = AsyncMock(return_value=(b"", stderr))
+        mock_proc.returncode = returncode
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
+            if returncode != 0:
+                with pytest.raises(LimaError):
+                    await vm.copy("/host/file", "/guest/file", host_to_guest=host_to_guest)
+            else:
+                await vm.copy("/host/file", "/guest/file", host_to_guest=host_to_guest)
+            return list(mock_exec.call_args.args)
+
+    async def test_copy_host_to_guest_args(self) -> None:
+        """Host-to-guest passes src and instance:dst."""
+        args = await self._run_copy(host_to_guest=True)
+        assert args == ["limactl", "copy", "/host/file", "test:/guest/file"]
+
+    async def test_copy_guest_to_host_args(self) -> None:
+        """Guest-to-host passes instance:src and dst."""
+        args = await self._run_copy(host_to_guest=False)
+        assert args == ["limactl", "copy", "test:/host/file", "/guest/file"]
+
+    async def test_copy_failure_raises_lima_error(self) -> None:
+        """Non-zero exit code raises LimaError."""
+        await self._run_copy(host_to_guest=True, returncode=1, stderr=b"no such file")
 
 
 class TestShellCommandBuilding:

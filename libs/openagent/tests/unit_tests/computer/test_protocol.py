@@ -23,6 +23,12 @@ def test_mock_satisfies_protocol() -> None:
         ) -> CLIResult:
             return CLIResult(stdout=f"mocked: {command}")
 
+        async def upload(self, src: str, dst: str) -> None:
+            pass
+
+        async def download(self, src: str, dst: str) -> None:
+            pass
+
         async def restart(self) -> None:
             pass
 
@@ -51,6 +57,12 @@ async def test_mock_can_execute() -> None:
             timeout: float | None = None,
         ) -> CLIResult:
             return CLIResult(stdout=f"ran: {command}", exit_code=0)
+
+        async def upload(self, src: str, dst: str) -> None:
+            pass
+
+        async def download(self, src: str, dst: str) -> None:
+            pass
 
         async def restart(self) -> None:
             pass

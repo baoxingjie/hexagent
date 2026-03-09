@@ -54,6 +54,12 @@ class MockComputer:
                 return result
         return CLIResult(stdout="", stderr="", exit_code=1)
 
+    async def upload(self, src: str, dst: str) -> None:
+        pass
+
+    async def download(self, src: str, dst: str) -> None:
+        pass
+
     async def stop(self) -> None:
         pass
 

@@ -39,6 +39,31 @@ class Computer(Protocol):
         """Execute a command. Auto-starts if needed."""
         ...
 
+    async def upload(self, src: str, dst: str) -> None:
+        """Transfer a file from the host to the computer.
+
+        Args:
+            src: Absolute path on the host filesystem.
+            dst: Absolute path on the computer filesystem.
+
+        Raises:
+            FileNotFoundError: If src does not exist on the host.
+            CLIError: If the transfer fails.
+        """
+        ...
+
+    async def download(self, src: str, dst: str) -> None:
+        """Transfer a file from the computer to the host.
+
+        Args:
+            src: Absolute path on the computer filesystem.
+            dst: Absolute path on the host filesystem.
+
+        Raises:
+            CLIError: If the transfer fails.
+        """
+        ...
+
     async def stop(self) -> None:
         """Stop the computer. Idempotent."""
         ...

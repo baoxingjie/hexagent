@@ -278,6 +278,44 @@ class LimaVM:
         )
 
     # ------------------------------------------------------------------
+    # File transfer
+    # ------------------------------------------------------------------
+
+    async def copy(self, src: str, dst: str, *, host_to_guest: bool) -> None:
+        """Copy a file between host and guest via ``limactl copy``.
+
+        Args:
+            src: Source path (host path if host_to_guest, else guest path).
+            dst: Destination path (guest path if host_to_guest, else host path).
+            host_to_guest: Direction of the copy.
+
+        Raises:
+            LimaError: If the copy fails.
+        """
+        if host_to_guest:
+            copy_src = src
+            copy_dst = f"{self._instance}:{dst}"
+        else:
+            copy_src = f"{self._instance}:{src}"
+            copy_dst = dst
+
+        proc = await asyncio.create_subprocess_exec(
+            "limactl",
+            "copy",
+            copy_src,
+            copy_dst,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr_bytes = await proc.communicate()
+
+        if proc.returncode != 0:
+            stderr = stderr_bytes.decode("utf-8", errors="replace").strip()
+            direction = "host→guest" if host_to_guest else "guest→host"
+            msg = f"limactl copy failed ({direction}): {stderr}"
+            raise LimaError(msg)
+
+    # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
