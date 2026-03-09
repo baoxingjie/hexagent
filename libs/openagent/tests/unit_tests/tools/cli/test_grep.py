@@ -19,79 +19,81 @@ class TestBuildRgCommand:
 
     def test_default_files_with_matches(self) -> None:
         """Default output_mode produces --files-with-matches."""
-        params = GrepToolParams(pattern="TODO")
+        params = GrepToolParams(description="test", pattern="TODO")
         cmd = build_rg_command(params)
         assert "--files-with-matches" in cmd
         assert cmd.startswith("rg ")
 
     def test_content_mode_with_line_numbers(self) -> None:
         """Content mode adds --line-number when show_line_numbers is True."""
-        params = GrepToolParams(pattern="foo", output_mode="content")
+        params = GrepToolParams(description="test", pattern="foo", output_mode="content")
         cmd = build_rg_command(params)
         assert "--line-number" in cmd
         assert "--files-with-matches" not in cmd
 
     def test_content_mode_without_line_numbers(self) -> None:
         """Content mode omits --line-number when show_line_numbers is False."""
-        params = GrepToolParams.model_validate({"pattern": "foo", "output_mode": "content", "-n": False})
+        params = GrepToolParams.model_validate({"description": "test", "pattern": "foo", "output_mode": "content", "-n": False})
         cmd = build_rg_command(params)
         assert "--line-number" not in cmd
 
     def test_count_mode(self) -> None:
         """Count mode produces --count."""
-        params = GrepToolParams(pattern="foo", output_mode="count")
+        params = GrepToolParams(description="test", pattern="foo", output_mode="count")
         cmd = build_rg_command(params)
         assert "--count" in cmd
         assert "--files-with-matches" not in cmd
 
     def test_case_insensitive(self) -> None:
         """case_insensitive adds --ignore-case."""
-        params = GrepToolParams.model_validate({"pattern": "foo", "-i": True})
+        params = GrepToolParams.model_validate({"description": "test", "pattern": "foo", "-i": True})
         cmd = build_rg_command(params)
         assert "--ignore-case" in cmd
 
     def test_multiline(self) -> None:
         """Multiline adds --multiline --multiline-dotall."""
-        params = GrepToolParams(pattern="foo", multiline=True)
+        params = GrepToolParams(description="test", pattern="foo", multiline=True)
         cmd = build_rg_command(params)
         assert "--multiline" in cmd
         assert "--multiline-dotall" in cmd
 
     def test_glob_filter(self) -> None:
         """Glob adds --glob with the pattern."""
-        params = GrepToolParams(pattern="foo", glob="*.py")
+        params = GrepToolParams(description="test", pattern="foo", glob="*.py")
         cmd = build_rg_command(params)
         assert "--glob" in cmd
         assert "*.py" in cmd
 
     def test_type_filter(self) -> None:
         """Type adds --type with the value."""
-        params = GrepToolParams(pattern="foo", type="py")
+        params = GrepToolParams(description="test", pattern="foo", type="py")
         cmd = build_rg_command(params)
         assert "--type" in cmd
         assert "py" in cmd
 
     def test_after_context(self) -> None:
         """after_context adds -A flag in content mode."""
-        params = GrepToolParams.model_validate({"pattern": "foo", "output_mode": "content", "-A": 3})
+        params = GrepToolParams.model_validate({"description": "test", "pattern": "foo", "output_mode": "content", "-A": 3})
         cmd = build_rg_command(params)
         assert "-A 3" in cmd
 
     def test_before_context(self) -> None:
         """before_context adds -B flag in content mode."""
-        params = GrepToolParams.model_validate({"pattern": "foo", "output_mode": "content", "-B": 2})
+        params = GrepToolParams.model_validate({"description": "test", "pattern": "foo", "output_mode": "content", "-B": 2})
         cmd = build_rg_command(params)
         assert "-B 2" in cmd
 
     def test_combined_context(self) -> None:
         """Context adds -C flag in content mode."""
-        params = GrepToolParams.model_validate({"pattern": "foo", "output_mode": "content", "-C": 5})
+        params = GrepToolParams.model_validate({"description": "test", "pattern": "foo", "output_mode": "content", "-C": 5})
         cmd = build_rg_command(params)
         assert "-C 5" in cmd
 
     def test_context_flags_ignored_in_files_mode(self) -> None:
         """Context flags are omitted when output_mode is not content."""
-        params = GrepToolParams.model_validate({"pattern": "foo", "output_mode": "files_with_matches", "-A": 3, "-B": 2, "-C": 1})
+        params = GrepToolParams.model_validate(
+            {"description": "test", "pattern": "foo", "output_mode": "files_with_matches", "-A": 3, "-B": 2, "-C": 1}
+        )
         cmd = build_rg_command(params)
         assert "-A" not in cmd
         assert "-B" not in cmd
@@ -99,32 +101,32 @@ class TestBuildRgCommand:
 
     def test_line_numbers_ignored_in_files_mode(self) -> None:
         """--line-number is omitted when output_mode is not content."""
-        params = GrepToolParams(pattern="foo", output_mode="files_with_matches")
+        params = GrepToolParams(description="test", pattern="foo", output_mode="files_with_matches")
         cmd = build_rg_command(params)
         assert "--line-number" not in cmd
 
     def test_pattern_with_special_chars_is_quoted(self) -> None:
         """Pattern containing shell-special characters is quoted."""
-        params = GrepToolParams(pattern="hello world")
+        params = GrepToolParams(description="test", pattern="hello world")
         cmd = build_rg_command(params)
         # shlex.quote wraps in single quotes: 'hello world'
         assert "'hello world'" in cmd
 
     def test_path_with_spaces_is_quoted(self) -> None:
         """Path with spaces is shell-quoted."""
-        params = GrepToolParams(pattern="foo", path="/my dir/code")
+        params = GrepToolParams(description="test", pattern="foo", path="/my dir/code")
         cmd = build_rg_command(params)
         assert "'/my dir/code'" in cmd
 
     def test_double_dash_separator(self) -> None:
         """Command includes -- to separate flags from pattern."""
-        params = GrepToolParams(pattern="-v")
+        params = GrepToolParams(description="test", pattern="-v")
         cmd = build_rg_command(params)
         assert " -- " in cmd
 
     def test_default_path_is_dot(self) -> None:
         """Default path is current directory '.'."""
-        params = GrepToolParams(pattern="foo")
+        params = GrepToolParams(description="test", pattern="foo")
         cmd = build_rg_command(params)
         assert cmd.endswith(" .")
 
@@ -144,7 +146,7 @@ class TestGrepTool:
             return_value=CLIResult(stdout="file.py\n", exit_code=0),
         )
         tool = GrepTool(computer)
-        await tool(pattern="foo")
+        await tool(description="test", pattern="foo")
         computer.run.assert_called_once()
         cmd = computer.run.call_args[0][0]
         assert cmd.startswith("rg ")
@@ -166,7 +168,7 @@ class TestGrepToolFilesOutput:
             return_value=CLIResult(stdout="a.py\nb.py\nc.py\n", exit_code=0),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="foo")
+        result = await tool(description="test", pattern="foo")
         assert result.output is not None
         assert result.error is None
         assert "a.py" in result.output
@@ -180,7 +182,7 @@ class TestGrepToolFilesOutput:
             return_value=CLIResult(stdout="only.py\n", exit_code=0),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="foo")
+        result = await tool(description="test", pattern="foo")
         assert result.output is not None
         assert result.error is None
         assert "only.py" in result.output
@@ -192,7 +194,7 @@ class TestGrepToolFilesOutput:
             return_value=CLIResult(stdout="", exit_code=1),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="nonexistent")
+        result = await tool(description="test", pattern="nonexistent")
         assert result.output is not None
         assert result.error is None
 
@@ -203,7 +205,7 @@ class TestGrepToolFilesOutput:
             return_value=CLIResult(stdout="a.py\nb.py\nc.py\nd.py\n", exit_code=0),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="foo", head_limit=2)
+        result = await tool(description="test", pattern="foo", head_limit=2)
         assert result.output is not None
         assert result.error is None
         # First 2 files included, rest excluded
@@ -218,7 +220,7 @@ class TestGrepToolFilesOutput:
             return_value=CLIResult(stdout="a.py\nb.py\nc.py\n", exit_code=0),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="foo", offset=1)
+        result = await tool(description="test", pattern="foo", offset=1)
         assert result.output is not None
         assert "a.py" not in result.output
         assert "b.py" in result.output
@@ -234,7 +236,7 @@ class TestGrepToolFilesOutput:
             ),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="foo", offset=1, head_limit=2)
+        result = await tool(description="test", pattern="foo", offset=1, head_limit=2)
         assert result.output is not None
         assert result.error is None
         # Skip first 1, take next 2: b.py and c.py
@@ -257,7 +259,7 @@ class TestGrepToolCountOutput:
             ),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="foo", output_mode="count")
+        result = await tool(description="test", pattern="foo", output_mode="count")
         assert result.output is not None
         assert result.error is None
         assert "a.py:5" in result.output
@@ -270,7 +272,7 @@ class TestGrepToolCountOutput:
             return_value=CLIResult(stdout="a.py:1\n", exit_code=0),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="foo", output_mode="count")
+        result = await tool(description="test", pattern="foo", output_mode="count")
         assert result.output is not None
         assert result.error is None
         assert "a.py:1" in result.output
@@ -282,7 +284,7 @@ class TestGrepToolCountOutput:
             return_value=CLIResult(stdout="", exit_code=1),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="nonexistent", output_mode="count")
+        result = await tool(description="test", pattern="nonexistent", output_mode="count")
         assert result.output is not None
         assert result.error is None
 
@@ -297,6 +299,7 @@ class TestGrepToolCountOutput:
         )
         tool = GrepTool(computer)
         result = await tool(
+            description="test",
             pattern="foo",
             output_mode="count",
             offset=1,
@@ -321,7 +324,7 @@ class TestGrepToolContentOutput:
             return_value=CLIResult(stdout=rg_output, exit_code=0),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="def", output_mode="content")
+        result = await tool(description="test", pattern="def", output_mode="content")
         assert result.output is not None
         assert result.error is None
         assert "file.py:10:def foo():" in result.output
@@ -334,7 +337,7 @@ class TestGrepToolContentOutput:
             return_value=CLIResult(stdout="", exit_code=1),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="nonexistent", output_mode="content")
+        result = await tool(description="test", pattern="nonexistent", output_mode="content")
         assert result.output is not None
         assert result.error is None
 
@@ -346,7 +349,7 @@ class TestGrepToolContentOutput:
             return_value=CLIResult(stdout=rg_output, exit_code=0),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="line", output_mode="content", head_limit=2)
+        result = await tool(description="test", pattern="line", output_mode="content", head_limit=2)
         assert result.output is not None
         assert result.error is None
         # First 2 lines included, third excluded
@@ -362,7 +365,7 @@ class TestGrepToolContentOutput:
             return_value=CLIResult(stdout=rg_output, exit_code=0),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="line", output_mode="content", offset=1)
+        result = await tool(description="test", pattern="line", output_mode="content", offset=1)
         assert result.output is not None
         assert "line1" not in result.output
         assert "line2" in result.output
@@ -388,7 +391,7 @@ class TestGrepToolErrors:
             ),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="[invalid", output_mode="content")
+        result = await tool(description="test", pattern="[invalid", output_mode="content")
         assert result.error is not None
         assert "regex parse error" in result.error
         assert result.output is None
@@ -400,7 +403,7 @@ class TestGrepToolErrors:
             return_value=CLIResult(stdout="", stderr="", exit_code=2),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="[invalid")
+        result = await tool(description="test", pattern="[invalid")
         assert result.error is not None
         assert "exit code 2" in result.error
 
@@ -409,7 +412,7 @@ class TestGrepToolErrors:
         computer = AsyncMock()
         computer.run = AsyncMock(side_effect=CLIError("sandbox crashed"))
         tool = GrepTool(computer)
-        result = await tool(pattern="foo")
+        result = await tool(description="test", pattern="foo")
         assert result.error is not None
         assert "sandbox crashed" in result.error
 
@@ -418,7 +421,7 @@ class TestGrepToolErrors:
         computer = AsyncMock()
         computer.run = AsyncMock(side_effect=CLIError("timeout"))
         tool = GrepTool(computer)
-        result = await tool(pattern="foo")
+        result = await tool(description="test", pattern="foo")
         assert result.system is not None
 
     async def test_cli_error_output_is_none(self) -> None:
@@ -426,7 +429,7 @@ class TestGrepToolErrors:
         computer = AsyncMock()
         computer.run = AsyncMock(side_effect=CLIError("boom"))
         tool = GrepTool(computer)
-        result = await tool(pattern="foo")
+        result = await tool(description="test", pattern="foo")
         assert result.output is None
 
     async def test_exit_code_1_is_not_an_error(self) -> None:
@@ -436,6 +439,6 @@ class TestGrepToolErrors:
             return_value=CLIResult(stdout="", stderr="", exit_code=1),
         )
         tool = GrepTool(computer)
-        result = await tool(pattern="nonexistent")
+        result = await tool(description="test", pattern="nonexistent")
         assert result.error is None
         assert result.output is not None

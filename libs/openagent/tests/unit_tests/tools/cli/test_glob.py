@@ -52,7 +52,7 @@ class TestGlobToolExecute:
     async def test_finds_py_files_recursively(self, sample_tree: Path) -> None:
         """**/*.py finds all .py files in the tree."""
         tool = GlobTool(LocalNativeComputer())
-        result = await tool(pattern="**/*.py", path=str(sample_tree))
+        result = await tool(description="test", pattern="**/*.py", path=str(sample_tree))
         assert result.output is not None
         assert result.error is None
         lines = result.output.strip().split("\n")
@@ -63,7 +63,7 @@ class TestGlobToolExecute:
     async def test_pattern_without_double_star_still_recurses(self, sample_tree: Path) -> None:
         """*.py (without **) behaves the same as **/*.py."""
         tool = GlobTool(LocalNativeComputer())
-        result = await tool(pattern="*.py", path=str(sample_tree))
+        result = await tool(description="test", pattern="*.py", path=str(sample_tree))
         assert result.output is not None
         lines = result.output.strip().split("\n")
         assert len(lines) == 4
@@ -71,7 +71,7 @@ class TestGlobToolExecute:
     async def test_brace_expansion(self, sample_tree: Path) -> None:
         """**/*.{py,toml} finds both .py and .toml files."""
         tool = GlobTool(LocalNativeComputer())
-        result = await tool(pattern="**/*.{py,toml}", path=str(sample_tree))
+        result = await tool(description="test", pattern="**/*.{py,toml}", path=str(sample_tree))
         assert result.output is not None
         lines = result.output.strip().split("\n")
         py_count = sum(1 for line in lines if line.endswith(".py"))
@@ -82,7 +82,7 @@ class TestGlobToolExecute:
     async def test_no_matches_returns_output_not_error(self, sample_tree: Path) -> None:
         """Pattern with no matches returns output (not error)."""
         tool = GlobTool(LocalNativeComputer())
-        result = await tool(pattern="**/*.xyz", path=str(sample_tree))
+        result = await tool(description="test", pattern="**/*.xyz", path=str(sample_tree))
         assert result.output is not None
         assert result.error is None
         # Should not contain any .xyz file paths
@@ -91,7 +91,7 @@ class TestGlobToolExecute:
     async def test_nonexistent_directory_returns_error(self) -> None:
         """Non-existent directory returns error with descriptive message."""
         tool = GlobTool(LocalNativeComputer())
-        result = await tool(pattern="*.py", path="/nonexistent/path/12345")
+        result = await tool(description="test", pattern="*.py", path="/nonexistent/path/12345")
         assert result.error is not None
         assert "does not exist" in result.error.lower()
         assert result.output is None
@@ -99,7 +99,7 @@ class TestGlobToolExecute:
     async def test_results_are_absolute_paths(self, sample_tree: Path) -> None:
         """All result paths are absolute."""
         tool = GlobTool(LocalNativeComputer())
-        result = await tool(pattern="**/*.py", path=str(sample_tree))
+        result = await tool(description="test", pattern="**/*.py", path=str(sample_tree))
         assert result.output is not None
         for line in result.output.strip().split("\n"):
             assert line.startswith("/")
@@ -107,7 +107,7 @@ class TestGlobToolExecute:
     async def test_specific_filename_pattern(self, sample_tree: Path) -> None:
         """**/test_*.py finds only test files."""
         tool = GlobTool(LocalNativeComputer())
-        result = await tool(pattern="**/test_*.py", path=str(sample_tree))
+        result = await tool(description="test", pattern="**/test_*.py", path=str(sample_tree))
         assert result.output is not None
         lines = result.output.strip().split("\n")
         assert len(lines) == 1
@@ -116,14 +116,14 @@ class TestGlobToolExecute:
     async def test_default_path_uses_cwd(self) -> None:
         """Omitting path uses the current working directory without error."""
         tool = GlobTool(LocalNativeComputer())
-        result = await tool(pattern="**/*.py")
+        result = await tool(description="test", pattern="**/*.py")
         # Should not error; may or may not find files depending on cwd
         assert result.error is None
 
     async def test_only_files_not_directories(self, sample_tree: Path) -> None:
         """Results contain only files, not directories."""
         tool = GlobTool(LocalNativeComputer())
-        result = await tool(pattern="**/*", path=str(sample_tree))
+        result = await tool(description="test", pattern="**/*", path=str(sample_tree))
         assert result.output is not None
         for line in result.output.strip().split("\n"):
             assert not Path(line).is_dir()
@@ -145,7 +145,7 @@ class TestGlobToolSorting:
         os.utime(new, (2000, 2000))
 
         tool = GlobTool(LocalNativeComputer())
-        result = await tool(pattern="*.py", path=str(tmp_path))
+        result = await tool(description="test", pattern="*.py", path=str(tmp_path))
         assert result.output is not None
         lines = result.output.strip().split("\n")
         assert len(lines) == 2
@@ -162,7 +162,7 @@ class TestGlobToolResultLimit:
             (tmp_path / f"file_{i:03d}.txt").write_text(f"# {i}")
 
         tool = GlobTool(LocalNativeComputer())
-        result = await tool(pattern="*.txt", path=str(tmp_path))
+        result = await tool(description="test", pattern="*.txt", path=str(tmp_path))
         assert result.output is not None
         lines = result.output.strip().split("\n")
         assert len(lines) == 100
@@ -176,7 +176,7 @@ class TestGlobToolCLIError:
         computer = AsyncMock()
         computer.run = AsyncMock(side_effect=CLIError("sandbox crashed"))
         tool = GlobTool(computer)
-        result = await tool(pattern="*.py")
+        result = await tool(description="test", pattern="*.py")
         assert result.error is not None
         assert "sandbox crashed" in result.error
 
@@ -185,7 +185,7 @@ class TestGlobToolCLIError:
         computer = AsyncMock()
         computer.run = AsyncMock(side_effect=CLIError("timeout"))
         tool = GlobTool(computer)
-        result = await tool(pattern="*.py")
+        result = await tool(description="test", pattern="*.py")
         assert result.system is not None
 
     async def test_cli_error_output_is_none(self) -> None:
@@ -193,5 +193,5 @@ class TestGlobToolCLIError:
         computer = AsyncMock()
         computer.run = AsyncMock(side_effect=CLIError("boom"))
         tool = GlobTool(computer)
-        result = await tool(pattern="*.py")
+        result = await tool(description="test", pattern="*.py")
         assert result.output is None

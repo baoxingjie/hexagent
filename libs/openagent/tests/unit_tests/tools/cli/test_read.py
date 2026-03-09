@@ -63,14 +63,14 @@ class TestReadTool:
 
     async def test_read_file(self, tool: ReadTool, sample_file: str) -> None:
         """Read a text file and get numbered output."""
-        result = await tool(file_path=sample_file)
+        result = await tool(description="test", file_path=sample_file)
         assert result.output is not None
         assert "line1" in result.output
         assert result.error is None
 
     async def test_line_numbers_format(self, tool: ReadTool, sample_file: str) -> None:
         """Output uses numbered format: number + separator + content."""
-        result = await tool(file_path=sample_file)
+        result = await tool(description="test", file_path=sample_file)
         assert result.output is not None
         first_line = result.output.split("\n")[0]
         # Format: right-justified number, separator (→), then content
@@ -79,7 +79,7 @@ class TestReadTool:
 
     async def test_all_lines_present(self, tool: ReadTool, sample_file: str) -> None:
         """All 10 lines are present in the output."""
-        result = await tool(file_path=sample_file)
+        result = await tool(description="test", file_path=sample_file)
         assert result.output is not None
         for i in range(1, 11):
             assert f"line{i}" in result.output
@@ -87,25 +87,25 @@ class TestReadTool:
     async def test_nonexistent_file(self, tool: ReadTool, tmp_path: pytest.TempPathFactory) -> None:
         """Non-existent file returns error."""
         path = str(tmp_path) + "/nonexistent.txt"
-        result = await tool(file_path=path)
+        result = await tool(description="test", file_path=path)
         assert result.error is not None
         assert result.output is None
 
     async def test_directory_returns_error(self, tool: ReadTool, tmp_path: pytest.TempPathFactory) -> None:
         """Reading a directory returns error."""
-        result = await tool(file_path=str(tmp_path))
+        result = await tool(description="test", file_path=str(tmp_path))
         assert result.error is not None
         assert result.output is None
 
     async def test_empty_file(self, tool: ReadTool, empty_file: str) -> None:
         """Empty file returns error (nothing to read)."""
-        result = await tool(file_path=empty_file)
+        result = await tool(description="test", file_path=empty_file)
         assert result.error is not None
         assert result.output is None
 
     async def test_binary_file_rejected(self, tool: ReadTool, binary_file: str) -> None:
         """Binary file returns error."""
-        result = await tool(file_path=binary_file)
+        result = await tool(description="test", file_path=binary_file)
         assert result.error is not None
         assert result.output is None
 
@@ -120,14 +120,14 @@ class TestReadToolOffset:
 
     async def test_offset_skips_lines(self, tool: ReadTool, sample_file: str) -> None:
         """offset=5 skips first 4 lines, starts at line 5."""
-        result = await tool(file_path=sample_file, offset=5)
+        result = await tool(description="test", file_path=sample_file, offset=5)
         assert result.output is not None
         assert "line5" in result.output
         assert "line4" not in result.output
 
     async def test_limit_caps_output(self, tool: ReadTool, sample_file: str) -> None:
         """limit=3 returns exactly 3 lines."""
-        result = await tool(file_path=sample_file, limit=3)
+        result = await tool(description="test", file_path=sample_file, limit=3)
         assert result.output is not None
         non_empty = [line for line in result.output.strip().split("\n") if line.strip()]
         expected_lines = 3
@@ -135,7 +135,7 @@ class TestReadToolOffset:
 
     async def test_offset_and_limit(self, tool: ReadTool, sample_file: str) -> None:
         """offset=3, limit=3 returns lines 3-5."""
-        result = await tool(file_path=sample_file, offset=3, limit=3)
+        result = await tool(description="test", file_path=sample_file, offset=3, limit=3)
         assert result.output is not None
         assert "line3" in result.output
         assert "line5" in result.output
@@ -144,13 +144,13 @@ class TestReadToolOffset:
 
     async def test_offset_past_end(self, tool: ReadTool, sample_file: str) -> None:
         """Offset past end of file returns error."""
-        result = await tool(file_path=sample_file, offset=100)
+        result = await tool(description="test", file_path=sample_file, offset=100)
         assert result.error is not None
         assert result.output is None
 
     async def test_limit_past_end(self, tool: ReadTool, sample_file: str) -> None:
         """Limit larger than file returns all lines (no error)."""
-        result = await tool(file_path=sample_file, limit=9999)
+        result = await tool(description="test", file_path=sample_file, limit=9999)
         assert result.output is not None
         assert "line1" in result.output
         assert "line10" in result.output
@@ -158,14 +158,14 @@ class TestReadToolOffset:
 
     async def test_offset_zero_labels_from_zero(self, tool: ReadTool, sample_file: str) -> None:
         """offset=0 labels the first line as line 0."""
-        result = await tool(file_path=sample_file, offset=0, limit=1)
+        result = await tool(description="test", file_path=sample_file, offset=0, limit=1)
         assert result.output is not None
         # First line should be labeled as 0
         assert result.output.startswith("     0")
 
     async def test_offset_one_labels_from_one(self, tool: ReadTool, sample_file: str) -> None:
         """offset=1 labels the first line as line 1."""
-        result = await tool(file_path=sample_file, offset=1, limit=1)
+        result = await tool(description="test", file_path=sample_file, offset=1, limit=1)
         assert result.output is not None
         # First line should be labeled as 1
         assert result.output.startswith("     1")
@@ -184,7 +184,7 @@ class TestReadToolCLIError:
         computer = AsyncMock()
         computer.run = AsyncMock(side_effect=CLIError("sandbox crashed"))
         tool = ReadTool(computer)
-        result = await tool(file_path="/any/path")
+        result = await tool(description="test", file_path="/any/path")
         assert result.error is not None
         assert "sandbox crashed" in result.error
 
@@ -193,7 +193,7 @@ class TestReadToolCLIError:
         computer = AsyncMock()
         computer.run = AsyncMock(side_effect=CLIError("timeout"))
         tool = ReadTool(computer)
-        result = await tool(file_path="/any/path")
+        result = await tool(description="test", file_path="/any/path")
         assert result.system is not None
 
     async def test_cli_error_output_is_none(self) -> None:
@@ -201,7 +201,7 @@ class TestReadToolCLIError:
         computer = AsyncMock()
         computer.run = AsyncMock(side_effect=CLIError("boom"))
         tool = ReadTool(computer)
-        result = await tool(file_path="/any/path")
+        result = await tool(description="test", file_path="/any/path")
         assert result.output is None
 
 
@@ -291,7 +291,7 @@ class TestReadToolLongLines:
 
     async def test_long_lines_truncated(self, tool: ReadTool, long_line_file: str) -> None:
         """Lines longer than 2000 chars are truncated in output."""
-        result = await tool(file_path=long_line_file)
+        result = await tool(description="test", file_path=long_line_file)
         assert result.output is not None
         first_line = result.output.split("\n")[0]
         # Extract content after the separator

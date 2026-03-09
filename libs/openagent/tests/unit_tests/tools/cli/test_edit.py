@@ -23,6 +23,7 @@ class TestEditTool:
         computer = LocalNativeComputer()
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path=str(path),
             old_string="hello",
             new_string="goodbye",
@@ -37,6 +38,7 @@ class TestEditTool:
         computer = LocalNativeComputer()
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path=str(path),
             old_string="aaa",
             new_string="ccc",
@@ -52,6 +54,7 @@ class TestEditTool:
         computer = LocalNativeComputer()
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path=str(path),
             old_string="line1\nline2",
             new_string="combined",
@@ -67,6 +70,7 @@ class TestEditTool:
         computer = LocalNativeComputer()
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path=str(path),
             old_string='$100 and "quoted"',
             new_string="replaced",
@@ -82,6 +86,7 @@ class TestEditTool:
         computer = LocalNativeComputer()
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path=str(path),
             old_string=" remove this",
             new_string="",
@@ -100,6 +105,7 @@ class TestEditToolErrors:
         computer = LocalNativeComputer()
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path=str(path),
             old_string="foo",
             new_string="baz",
@@ -117,6 +123,7 @@ class TestEditToolErrors:
         computer = LocalNativeComputer()
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path=str(path),
             old_string="nonexistent",
             new_string="something",
@@ -131,6 +138,7 @@ class TestEditToolErrors:
         computer = LocalNativeComputer()
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path=str(path),
             old_string="hello",
             new_string="hello",
@@ -144,6 +152,7 @@ class TestEditToolErrors:
         computer = LocalNativeComputer()
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path=str(nonexistent),
             old_string="x",
             new_string="y",
@@ -159,6 +168,7 @@ class TestEditToolErrors:
         computer = LocalNativeComputer()
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path=str(path),
             old_string="",
             new_string="something",
@@ -177,6 +187,7 @@ class TestEditToolOutputFormat:
         computer = LocalNativeComputer()
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path=str(path),
             old_string="old",
             new_string="new",
@@ -192,6 +203,7 @@ class TestEditToolOutputFormat:
         computer = LocalNativeComputer()
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path=str(path),
             old_string="aaa",
             new_string="ccc",
@@ -208,6 +220,7 @@ class TestEditToolOutputFormat:
         computer = LocalNativeComputer()
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path=str(path),
             old_string="missing",
             new_string="something",
@@ -225,6 +238,7 @@ class TestEditToolCLIError:
         computer.run = AsyncMock(side_effect=CLIError("sandbox crashed"))
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path="/any/path",
             old_string="x",
             new_string="y",
@@ -238,6 +252,7 @@ class TestEditToolCLIError:
         computer.run = AsyncMock(side_effect=CLIError("timeout"))
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path="/any/path",
             old_string="x",
             new_string="y",
@@ -250,6 +265,7 @@ class TestEditToolCLIError:
         computer.run = AsyncMock(side_effect=CLIError("boom"))
         tool = EditTool(computer)
         result = await tool(
+            description="test",
             file_path="/any/path",
             old_string="x",
             new_string="y",

@@ -21,7 +21,7 @@ class TestWriteTool:
         computer = LocalNativeComputer()
         tool = WriteTool(computer)
         target = tmp_path / "hello.txt"
-        result = await tool(file_path=str(target), content="hello world")
+        result = await tool(description="test", file_path=str(target), content="hello world")
         assert result.output is not None
         assert result.error is None
         assert target.read_text() == "hello world"
@@ -32,7 +32,7 @@ class TestWriteTool:
         target.write_text("old content")
         computer = LocalNativeComputer()
         tool = WriteTool(computer)
-        result = await tool(file_path=str(target), content="new content")
+        result = await tool(description="test", file_path=str(target), content="new content")
         assert result.output is not None
         assert result.error is None
         assert target.read_text() == "new content"
@@ -46,7 +46,7 @@ class TestWriteToolOutputFormat:
         computer = LocalNativeComputer()
         tool = WriteTool(computer)
         path = str(tmp_path / "new.txt")
-        result = await tool(file_path=path, content="data")
+        result = await tool(description="test", file_path=path, content="data")
         assert result.output is not None
         assert result.error is None
         assert path in result.output
@@ -57,7 +57,7 @@ class TestWriteToolOutputFormat:
         target.write_text("old")
         computer = LocalNativeComputer()
         tool = WriteTool(computer)
-        result = await tool(file_path=str(target), content="line1\nline2\n")
+        result = await tool(description="test", file_path=str(target), content="line1\nline2\n")
         assert result.output is not None
         assert result.error is None
         assert target.read_text() == "line1\nline2\n"
@@ -68,7 +68,7 @@ class TestWriteToolOutputFormat:
         target.write_text("old")
         computer = LocalNativeComputer()
         tool = WriteTool(computer)
-        result = await tool(file_path=str(target), content="alpha\nbeta\n")
+        result = await tool(description="test", file_path=str(target), content="alpha\nbeta\n")
         assert result.output is not None
         assert result.error is None
         assert "alpha" in result.output
@@ -80,7 +80,7 @@ class TestWriteToolOutputFormat:
         target.write_text("")
         computer = LocalNativeComputer()
         tool = WriteTool(computer)
-        result = await tool(file_path=str(target), content="now has content")
+        result = await tool(description="test", file_path=str(target), content="now has content")
         assert result.output is not None
         assert result.error is None
         assert target.read_text() == "now has content"
@@ -90,7 +90,7 @@ class TestWriteToolOutputFormat:
         computer = LocalNativeComputer()
         tool = WriteTool(computer)
         target = tmp_path / "empty.txt"
-        result = await tool(file_path=str(target), content="")
+        result = await tool(description="test", file_path=str(target), content="")
         assert result.error is None
         assert result.output is not None
         assert target.stat().st_size == 0
@@ -100,7 +100,7 @@ class TestWriteToolOutputFormat:
         computer = LocalNativeComputer()
         tool = WriteTool(computer)
         path = str(tmp_path / "ok.txt")
-        result = await tool(file_path=path, content="ok")
+        result = await tool(description="test", file_path=path, content="ok")
         assert result.error is None
         assert result.output is not None
 
@@ -114,7 +114,7 @@ class TestWriteToolSpecialContent:
         tool = WriteTool(computer)
         target = tmp_path / "dollar.txt"
         content = "price is $100 and $HOME"
-        result = await tool(file_path=str(target), content=content)
+        result = await tool(description="test", file_path=str(target), content=content)
         assert result.error is None
         assert target.read_text() == content
 
@@ -124,7 +124,7 @@ class TestWriteToolSpecialContent:
         tool = WriteTool(computer)
         target = tmp_path / "backtick.txt"
         content = "run `echo hello` now"
-        result = await tool(file_path=str(target), content=content)
+        result = await tool(description="test", file_path=str(target), content=content)
         assert result.error is None
         assert target.read_text() == content
 
@@ -134,7 +134,7 @@ class TestWriteToolSpecialContent:
         tool = WriteTool(computer)
         target = tmp_path / "squote.txt"
         content = "it's a 'test'"
-        result = await tool(file_path=str(target), content=content)
+        result = await tool(description="test", file_path=str(target), content=content)
         assert result.error is None
         assert target.read_text() == content
 
@@ -144,7 +144,7 @@ class TestWriteToolSpecialContent:
         tool = WriteTool(computer)
         target = tmp_path / "dquote.txt"
         content = 'she said "hello"'
-        result = await tool(file_path=str(target), content=content)
+        result = await tool(description="test", file_path=str(target), content=content)
         assert result.error is None
         assert target.read_text() == content
 
@@ -154,7 +154,7 @@ class TestWriteToolSpecialContent:
         tool = WriteTool(computer)
         target = tmp_path / "backslash.txt"
         content = "path\\to\\file and \\n not newline"
-        result = await tool(file_path=str(target), content=content)
+        result = await tool(description="test", file_path=str(target), content=content)
         assert result.error is None
         assert target.read_text() == content
 
@@ -164,7 +164,7 @@ class TestWriteToolSpecialContent:
         tool = WriteTool(computer)
         target = tmp_path / "newlines.txt"
         content = "line1\nline2\nline3\n"
-        result = await tool(file_path=str(target), content=content)
+        result = await tool(description="test", file_path=str(target), content=content)
         assert result.error is None
         assert target.read_text() == content
 
@@ -174,7 +174,7 @@ class TestWriteToolSpecialContent:
         tool = WriteTool(computer)
         target = tmp_path / "unicode.txt"
         content = "Hello \U0001f389 \u4e16\u754c caf\u00e9"
-        result = await tool(file_path=str(target), content=content)
+        result = await tool(description="test", file_path=str(target), content=content)
         assert result.error is None
         assert target.read_text() == content
 
@@ -184,7 +184,7 @@ class TestWriteToolSpecialContent:
         tool = WriteTool(computer)
         target = tmp_path / "marker.txt"
         content = "before\n__WRITE_PYEOF__\nafter"
-        result = await tool(file_path=str(target), content=content)
+        result = await tool(description="test", file_path=str(target), content=content)
         assert result.error is None
         assert target.read_text() == content
 
@@ -194,7 +194,7 @@ class TestWriteToolSpecialContent:
         tool = WriteTool(computer)
         target = tmp_path / "mixed.txt"
         content = "$HOME `cmd` 'single' \"double\" back\\slash\nnewline\ttab"
-        result = await tool(file_path=str(target), content=content)
+        result = await tool(description="test", file_path=str(target), content=content)
         assert result.error is None
         assert target.read_text() == content
 
@@ -207,7 +207,7 @@ class TestWriteToolDirectoryCreation:
         computer = LocalNativeComputer()
         tool = WriteTool(computer)
         target = tmp_path / "a" / "b" / "c" / "deep.txt"
-        result = await tool(file_path=str(target), content="deep")
+        result = await tool(description="test", file_path=str(target), content="deep")
         assert result.error is None
         assert target.read_text() == "deep"
 
@@ -218,7 +218,7 @@ class TestWriteToolDirectoryCreation:
         computer = LocalNativeComputer()
         tool = WriteTool(computer)
         target = subdir / "file.txt"
-        result = await tool(file_path=str(target), content="content")
+        result = await tool(description="test", file_path=str(target), content="content")
         assert result.error is None
         assert target.read_text() == "content"
 
@@ -230,7 +230,7 @@ class TestWriteToolErrors:
         """Writing to a path that is a directory returns error."""
         computer = LocalNativeComputer()
         tool = WriteTool(computer)
-        result = await tool(file_path=str(tmp_path), content="data")
+        result = await tool(description="test", file_path=str(tmp_path), content="data")
         assert result.error is not None
         assert result.output is None
 
@@ -238,7 +238,7 @@ class TestWriteToolErrors:
         """Relative paths are rejected with a clear error message."""
         computer = LocalNativeComputer()
         tool = WriteTool(computer)
-        result = await tool(file_path="relative/path.txt", content="data")
+        result = await tool(description="test", file_path="relative/path.txt", content="data")
         assert result.error is not None
         assert "absolute" in result.error.lower()
 
@@ -246,7 +246,7 @@ class TestWriteToolErrors:
         """Failed write never sets output (mutually exclusive)."""
         computer = LocalNativeComputer()
         tool = WriteTool(computer)
-        result = await tool(file_path=str(tmp_path), content="data")
+        result = await tool(description="test", file_path=str(tmp_path), content="data")
         assert result.output is None
         assert result.error is not None
 
@@ -259,7 +259,7 @@ class TestWriteToolCLIError:
         computer = AsyncMock()
         computer.run = AsyncMock(side_effect=CLIError("sandbox crashed"))
         tool = WriteTool(computer)
-        result = await tool(file_path="/mock/test.txt", content="data")
+        result = await tool(description="test", file_path="/mock/test.txt", content="data")
         assert result.error is not None
         assert "sandbox crashed" in result.error
 
@@ -268,7 +268,7 @@ class TestWriteToolCLIError:
         computer = AsyncMock()
         computer.run = AsyncMock(side_effect=CLIError("timeout"))
         tool = WriteTool(computer)
-        result = await tool(file_path="/mock/test.txt", content="data")
+        result = await tool(description="test", file_path="/mock/test.txt", content="data")
         assert result.system is not None
 
     async def test_cli_error_output_is_none(self) -> None:
@@ -276,5 +276,5 @@ class TestWriteToolCLIError:
         computer = AsyncMock()
         computer.run = AsyncMock(side_effect=CLIError("boom"))
         tool = WriteTool(computer)
-        result = await tool(file_path="/mock/test.txt", content="data")
+        result = await tool(description="test", file_path="/mock/test.txt", content="data")
         assert result.output is None

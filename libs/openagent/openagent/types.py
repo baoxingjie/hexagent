@@ -266,6 +266,9 @@ class BashToolParams(BaseModel):
 class ReadToolParams(BaseModel):
     """Input schema for read tool."""
 
+    description: str = Field(
+        description="Clear, concise description of what this Read does in active voice.",
+    )
     file_path: str = Field(description="The absolute path to the file to read")
     offset: int = Field(
         default=1,
@@ -282,6 +285,9 @@ class ReadToolParams(BaseModel):
 class WriteToolParams(BaseModel):
     """Input schema for write tool."""
 
+    description: str = Field(
+        description="Clear, concise description of what this Write does in active voice.",
+    )
     file_path: str = Field(description="The absolute path to the file to write (must be absolute, not relative)")
     content: str = Field(description="The content to write to the file")
 
@@ -289,6 +295,9 @@ class WriteToolParams(BaseModel):
 class EditToolParams(BaseModel):
     """Input schema for edit tool."""
 
+    description: str = Field(
+        description="Clear, concise description of what this Edit does in active voice.",
+    )
     file_path: str = Field(description="The absolute path to the file to modify")
     old_string: str = Field(description="The text to replace")
     new_string: str = Field(description="The text to replace it with (must be different from old_string)")
@@ -298,6 +307,9 @@ class EditToolParams(BaseModel):
 class GlobToolParams(BaseModel):
     """Input schema for glob tool."""
 
+    description: str = Field(
+        description="Clear, concise description of what this Glob does in active voice.",
+    )
     pattern: str = Field(description="The glob pattern to match files against")
     path: str | None = Field(
         default=None,
@@ -315,6 +327,9 @@ class GrepToolParams(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
+    description: str = Field(
+        description="Clear, concise description of what this Grep does in active voice.",
+    )
     pattern: str = Field(description="The regular expression pattern to search for in file contents")
     path: str = Field(
         default=".",
@@ -415,7 +430,7 @@ class SkillToolParams(BaseModel):
 class AgentToolParams(BaseModel):
     """Input schema for the Agent tool."""
 
-    description: str = Field(description="Short description of the task (3-5 words)")
+    description: str = Field(description="Clear, concise description of the task (3-8 words)")
     prompt: str = Field(description="The task for the agent to perform")
     subagent_type: str = Field(
         default="general-purpose",
