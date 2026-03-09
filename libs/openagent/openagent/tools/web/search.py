@@ -122,7 +122,7 @@ class WebSearchTool(BaseAgentTool[WebSearchToolParams]):
             output = "\n\n".join(
                 [
                     f'Web search results for query: "{params.query}"',
-                    f"Links: {json.dumps(links)}",
+                    f"Links: {json.dumps(links, ensure_ascii=False)}",
                     ai_summary,
                 ]
             )
