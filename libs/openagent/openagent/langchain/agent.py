@@ -22,7 +22,7 @@ from openagent.langchain.middleware import AgentMiddleware
 from openagent.langchain.subagent import LangChainSubagentRunner
 from openagent.prompts import FRESH_SESSION, RESUMED_SESSION, compose
 from openagent.tasks import TaskRegistry
-from openagent.tools import SkillTool, create_cli_tools, create_web_tools
+from openagent.tools import SkillTool, TodoWriteTool, create_cli_tools, create_web_tools
 from openagent.tools.task import TaskOutputTool, TaskStopTool
 from openagent.tools.task.agent import AgentTool
 from openagent.trace import init_langchain_tracing
@@ -316,6 +316,7 @@ async def create_agent(
                 completion_model=_create_completion_model(fast_profile) if search_provider or fetch_provider else None,
             ),
             *([SkillTool(catalog=skill_resolver)] if skills else []),
+            TodoWriteTool(),
             TaskOutputTool(registry),
             TaskStopTool(registry),
             *(extra_tools or []),

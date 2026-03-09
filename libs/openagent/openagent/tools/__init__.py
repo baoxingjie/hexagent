@@ -47,6 +47,7 @@ from openagent.tools.cli import (
 from openagent.tools.skill import SkillTool
 from openagent.tools.task import TaskOutputTool, TaskStopTool
 from openagent.tools.task.agent import AgentTool
+from openagent.tools.todo import TodoWriteTool
 from openagent.tools.web import (
     WebFetchTool,
     WebSearchTool,
@@ -64,6 +65,7 @@ BUILTIN_TOOLS: tuple[type[BaseAgentTool[Any]], ...] = (
     WebSearchTool,
     WebFetchTool,
     SkillTool,
+    TodoWriteTool,
 )
 """The canonical set of built-in tool classes.
 
@@ -91,6 +93,7 @@ __all__ = [
     "SubagentRunner",
     "TaskOutputTool",
     "TaskStopTool",
+    "TodoWriteTool",
     "WebFetchTool",
     "WebSearchTool",
     "WriteTool",
