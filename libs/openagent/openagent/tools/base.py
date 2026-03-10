@@ -6,14 +6,27 @@ This module defines the abstract interface for agent tools.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-if TYPE_CHECKING:
-    from openagent.types import ToolResult
+from openagent.types import ToolResult
 
 ParamsT = TypeVar("ParamsT", bound=BaseModel)
+
+
+def _format_validation_errors(
+    error: ValidationError,
+    tool_name: str | None = None,
+) -> str:
+    """Format pydantic validation errors into an LLM-friendly message."""
+    lines = [f"Tool call{f' to `{tool_name}`' if tool_name else ''} failed due to {error.error_count()} invalid parameter(s):"]
+
+    for err in error.errors(include_url=False):
+        loc = " -> ".join(str(s) for s in err.get("loc", [])) or "<root>"
+        lines.append(f"- `{loc}`: {err['msg']} (type={err['type']}, input={err.get('input')!r})")
+
+    return "\n".join(lines)
 
 
 class BaseAgentTool(ABC, Generic[ParamsT]):
@@ -66,10 +79,14 @@ class BaseAgentTool(ABC, Generic[ParamsT]):
             ToolResult containing the output of the tool execution.
 
         Raises:
-            ValidationError: If kwargs don't match args_schema.
             ToolError: For recoverable errors that the agent can handle.
         """
-        params = self.args_schema(**kwargs)
+        try:
+            params = self.args_schema(**kwargs)
+        except ValidationError as e:
+            err_msg = f"<tool_call_error>{_format_validation_errors(e, self.name)}</tool_call_error>"
+            return ToolResult(error=err_msg)
+
         return await self.execute(params)
 
     @abstractmethod

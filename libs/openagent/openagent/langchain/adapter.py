@@ -75,5 +75,5 @@ def to_langchain_tool(tool: BaseAgentTool[Any]) -> StructuredTool:
         description=tool.description,
         func=sync_invoke,
         coroutine=async_invoke,
-        args_schema=tool.args_schema,
+        args_schema=tool.json_schema,
     )

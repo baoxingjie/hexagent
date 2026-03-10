@@ -244,11 +244,13 @@ class CLIResult:
 class BashToolParams(BaseModel):
     """Input schema for bash tool."""
 
+    model_config = ConfigDict(extra="forbid")
+
     description: str = Field(
         description=(
             "Clear, concise description of what this command does in active voice."
             ' Never use words like "complex" or "risk" in the description'
-            " - just describe what it does."
+            " - just describe what it does. (Always generate this param first)"
         ),
     )
     command: str = Field(description="Shell command to execute.")
@@ -266,14 +268,16 @@ class BashToolParams(BaseModel):
 class ReadToolParams(BaseModel):
     """Input schema for read tool."""
 
+    model_config = ConfigDict(extra="forbid")
+
     description: str = Field(
-        description="Clear, concise description of what this Read does in active voice.",
+        description="Clear, concise description of what this Read does in active voice. (Always generate this param first)",
     )
     file_path: str = Field(description="The absolute path to the file to read")
     offset: int = Field(
         default=1,
         ge=0,
-        description="The line number to start reading from. Only provide if the file is too large to read at once",
+        description="The line number to start reading from. Only provide if the file is too large to read at once.",
     )
     limit: int = Field(
         default=2000,
@@ -285,8 +289,10 @@ class ReadToolParams(BaseModel):
 class WriteToolParams(BaseModel):
     """Input schema for write tool."""
 
+    model_config = ConfigDict(extra="forbid")
+
     description: str = Field(
-        description="Clear, concise description of what this Write does in active voice.",
+        description="Clear, concise description of what this Write does in active voice. (Always generate this param first)",
     )
     file_path: str = Field(description="The absolute path to the file to write (must be absolute, not relative)")
     content: str = Field(description="The content to write to the file")
@@ -295,8 +301,10 @@ class WriteToolParams(BaseModel):
 class EditToolParams(BaseModel):
     """Input schema for edit tool."""
 
+    model_config = ConfigDict(extra="forbid")
+
     description: str = Field(
-        description="Clear, concise description of what this Edit does in active voice.",
+        description="Clear, concise description of what this Edit does in active voice. (Always generate this param first)",
     )
     file_path: str = Field(description="The absolute path to the file to modify")
     old_string: str = Field(description="The text to replace")
@@ -307,8 +315,10 @@ class EditToolParams(BaseModel):
 class GlobToolParams(BaseModel):
     """Input schema for glob tool."""
 
+    model_config = ConfigDict(extra="forbid")
+
     description: str = Field(
-        description="Clear, concise description of what this Glob does in active voice.",
+        description="Clear, concise description of what this Glob does in active voice. (Always generate this param first)",
     )
     pattern: str = Field(description="The glob pattern to match files against")
     path: str | None = Field(
@@ -325,10 +335,10 @@ class GlobToolParams(BaseModel):
 class GrepToolParams(BaseModel):
     """Input schema for grep tool."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     description: str = Field(
-        description="Clear, concise description of what this Grep does in active voice.",
+        description="Clear, concise description of what this Grep does in active voice. (Always generate this param first)",
     )
     pattern: str = Field(description="The regular expression pattern to search for in file contents")
     path: str = Field(
@@ -407,11 +417,15 @@ class GrepToolParams(BaseModel):
 class WebSearchToolParams(BaseModel):
     """Input schema for web search tool."""
 
+    model_config = ConfigDict(extra="forbid")
+
     query: str = Field(description="The search query to use")
 
 
 class WebFetchToolParams(BaseModel):
     """Input schema for web fetch tool."""
+
+    model_config = ConfigDict(extra="forbid")
 
     url: str = Field(description="URL of the web page to fetch and extract content from")
     prompt: str | None = Field(
@@ -423,6 +437,8 @@ class WebFetchToolParams(BaseModel):
 class SkillToolParams(BaseModel):
     """Input schema for skill tool."""
 
+    model_config = ConfigDict(extra="forbid")
+
     skill: str = Field(description="The skill name to invoke (e.g., 'commit', 'review-pr', 'pdf')")
     args: str | None = Field(default=None, description="Optional arguments for the skill")
 
@@ -430,7 +446,9 @@ class SkillToolParams(BaseModel):
 class AgentToolParams(BaseModel):
     """Input schema for the Agent tool."""
 
-    description: str = Field(description="Clear, concise description of the task (3-8 words)")
+    model_config = ConfigDict(extra="forbid")
+
+    description: str = Field(description="Clear, concise 3-8 words description of the task (Always generate this param first)")
     prompt: str = Field(description="The task for the agent to perform")
     subagent_type: str = Field(
         default="general-purpose",
@@ -449,6 +467,8 @@ class AgentToolParams(BaseModel):
 class TaskOutputToolParams(BaseModel):
     """Input schema for the TaskOutput tool."""
 
+    model_config = ConfigDict(extra="forbid")
+
     task_id: str = Field(description="The task ID to get output from")
     block: bool = Field(default=True, description="Whether to wait for completion")
     timeout: int = Field(
@@ -462,11 +482,15 @@ class TaskOutputToolParams(BaseModel):
 class TaskStopToolParams(BaseModel):
     """Input schema for the TaskStop tool."""
 
+    model_config = ConfigDict(extra="forbid")
+
     task_id: str = Field(description="The task ID to cancel")
 
 
 class TodoItem(BaseModel):
     """A single todo item."""
+
+    model_config = ConfigDict(extra="forbid")
 
     content: str = Field(min_length=1, description="The todo item content")
     status: Literal["pending", "in_progress", "completed"] = Field(
@@ -480,6 +504,8 @@ class TodoItem(BaseModel):
 
 class TodoWriteToolParams(BaseModel):
     """Input schema for the TodoWrite tool."""
+
+    model_config = ConfigDict(extra="forbid")
 
     todos: list[TodoItem] = Field(description="The updated todo list")
 
