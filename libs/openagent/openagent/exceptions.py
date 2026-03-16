@@ -196,6 +196,57 @@ class LimaError(VMError):
     """
 
 
+class SkillError(Exception):
+    """Base error for skill-related failures.
+
+    Use this to catch any skill error regardless of the specific cause.
+
+    Subclasses:
+        SkillParseError: Structural problems in SKILL.md.
+        SkillValidationError: Field values violate the Agent Skills spec.
+    """
+
+
+class SkillParseError(SkillError):
+    """SKILL.md file cannot be structurally parsed.
+
+    Raised when a SKILL.md file has structural problems that prevent
+    extracting a valid skill specification.
+
+    Raise SkillParseError when:
+    - Missing or malformed frontmatter delimiters (``---``)
+    - YAML in the frontmatter block is syntactically invalid
+    - Required fields (``name``, ``description``) are absent
+
+    Do NOT raise SkillParseError when:
+    - Field values are present but violate constraints (use SkillValidationError)
+    - The skill directory structure is wrong (that's a resolver concern)
+
+    Examples:
+        ```python
+        raise SkillParseError("SKILL.md must start with '---' frontmatter delimiter")
+
+        raise SkillParseError("Invalid YAML in frontmatter: expected a mapping")
+        ```
+    """
+
+
+class SkillValidationError(SkillError):
+    """SKILL.md frontmatter values violate the Agent Skills specification.
+
+    Raise SkillValidationError when:
+    - ``name`` violates naming rules (length, character set, hyphen rules)
+    - ``description`` exceeds 1024 characters or is empty
+    - ``compatibility`` exceeds 500 characters
+    - ``metadata`` contains non-string keys or values
+
+    Examples:
+        ```python
+        raise SkillValidationError("Skill name 'PDF-Tool' is invalid: must contain only lowercase alphanumeric characters and hyphens")
+        ```
+    """
+
+
 CLI_INFRA_ERROR_SYSTEM_REMINDER = (
     "The execution environment has failed unexpectedly. This is an"
     " unrecoverable system-level failure, not a tool error. Stop current"

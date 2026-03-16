@@ -1,4 +1,4 @@
-"""Tests for harness/skills.py — SkillResolver, frontmatter parsing."""
+"""Tests for harness/skills.py -- SkillResolver discovery and loading."""
 
 # ruff: noqa: PLR2004
 
@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from openagent.harness.skills import SkillResolver, _parse_frontmatter
+from openagent.harness.skills import SkillResolver
 from openagent.types import CLIResult
 
 # ---------------------------------------------------------------------------
@@ -23,18 +23,19 @@ description: Extract text from PDFs
 Use this to extract text from PDF files.
 """
 
+_INVALID_NAME_SKILL_MD = """\
+---
+name: PDF_Bad
+description: Invalid name format
+---
+Body text.
+"""
+
 _MISSING_NAME_SKILL_MD = """\
 ---
 description: No name here
 ---
 Body text.
-"""
-
-_EMPTY_BODY_SKILL_MD = """\
----
-name: empty
-description: Skill with no body
----
 """
 
 
@@ -62,42 +63,6 @@ class MockComputer:
 
     async def stop(self) -> None:
         pass
-
-
-# ---------------------------------------------------------------------------
-# _parse_frontmatter
-# ---------------------------------------------------------------------------
-
-
-class TestParseFrontmatter:
-    def test_valid_frontmatter(self) -> None:
-        metadata, body = _parse_frontmatter(_VALID_SKILL_MD)
-        assert metadata["name"] == "pdf"
-        assert metadata["description"] == "Extract text from PDFs"
-        assert "# PDF Skill" in body
-
-    def test_missing_opening_delimiter_raises(self) -> None:
-        with pytest.raises(ValueError, match="must start with"):
-            _parse_frontmatter("no frontmatter here")
-
-    def test_missing_closing_delimiter_raises(self) -> None:
-        with pytest.raises(ValueError, match="missing closing"):
-            _parse_frontmatter("---\nname: test\nbody without closing")
-
-    def test_empty_frontmatter(self) -> None:
-        metadata, body = _parse_frontmatter("---\n---\nBody text.")
-        assert metadata == {}
-        assert body == "Body text."
-
-    def test_ignores_lines_without_colon(self) -> None:
-        raw = "---\nname: test\ninvalid line\n---\nBody."
-        metadata, _ = _parse_frontmatter(raw)
-        assert metadata == {"name": "test"}
-
-    def test_preserves_value_with_colons(self) -> None:
-        raw = "---\nurl: https://example.com:8080\n---\nBody."
-        metadata, _ = _parse_frontmatter(raw)
-        assert metadata["url"] == "https://example.com:8080"
 
 
 # ---------------------------------------------------------------------------
@@ -152,8 +117,8 @@ class TestSkillResolverDiscover:
         skills = await resolver.discover()
         assert len(skills) == 0
 
-    async def test_discover_skips_empty_body(self) -> None:
-        output = f"===SKILL_FILE===:/mnt/skills/empty\n{_EMPTY_BODY_SKILL_MD}\n"
+    async def test_discover_skips_invalid_name(self) -> None:
+        output = f"===SKILL_FILE===:/mnt/skills/bad\n{_INVALID_NAME_SKILL_MD}\n"
         resolver = self._make_resolver(output)
         skills = await resolver.discover()
         assert len(skills) == 0
@@ -167,6 +132,13 @@ class TestSkillResolverDiscover:
         resolver = SkillResolver(MockComputer(), search_paths=("/mnt/skills",))
         skills = await resolver.discover()
         assert skills == []
+
+    async def test_discover_deduplicates_same_directory(self) -> None:
+        """If both SKILL.md and skill.md exist, only the first match wins."""
+        output = f"===SKILL_FILE===:/mnt/skills/pdf\n{_VALID_SKILL_MD}\n===SKILL_FILE===:/mnt/skills/pdf\n{_VALID_SKILL_MD}\n"
+        resolver = self._make_resolver(output)
+        skills = await resolver.discover()
+        assert len(skills) == 1
 
 
 class TestSkillResolverHas:
@@ -213,22 +185,25 @@ class TestSkillResolverLoadContent:
         with pytest.raises(KeyError, match="Skill not discovered"):
             await resolver.load_content("nonexistent")
 
-    async def test_load_content_raises_on_empty_body(self) -> None:
+    async def test_load_content_falls_back_to_lowercase(self) -> None:
+        """If SKILL.md fails, load_content tries skill.md."""
         batch_output = f"===SKILL_FILE===:/mnt/skills/pdf\n{_VALID_SKILL_MD}\n"
         responses = {
             "for f in": CLIResult(stdout=batch_output, exit_code=0),
-            "cat": CLIResult(stdout=_EMPTY_BODY_SKILL_MD, exit_code=0),
+            # SKILL.md fails, skill.md succeeds
+            "SKILL.md": CLIResult(stdout="", stderr="not found", exit_code=1),
+            "skill.md": CLIResult(stdout=_VALID_SKILL_MD, exit_code=0),
         }
         resolver = SkillResolver(MockComputer(responses), search_paths=("/mnt/skills",))
         await resolver.discover()
-        with pytest.raises(RuntimeError, match="has no content body"):
-            await resolver.load_content("pdf")
+        content = await resolver.load_content("pdf")
+        assert "# PDF Skill" in content
 
     async def test_load_content_raises_on_read_failure(self) -> None:
         batch_output = f"===SKILL_FILE===:/mnt/skills/pdf\n{_VALID_SKILL_MD}\n"
         responses = {
             "for f in": CLIResult(stdout=batch_output, exit_code=0),
-            # cat command will fail (no matching response → exit_code=1)
+            # no cat response -> all filenames fail
         }
         resolver = SkillResolver(MockComputer(responses), search_paths=("/mnt/skills",))
         await resolver.discover()

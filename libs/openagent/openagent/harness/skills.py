@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from openagent.exceptions import SkillError
+from openagent.harness.skill_spec import parse_skill_md
 from openagent.types import Skill
 
 if TYPE_CHECKING:
@@ -23,52 +25,8 @@ DEFAULT_SKILL_PATHS: tuple[str, ...] = (
     ".openagent/skills",
 )
 
-_SKILL_FILENAME = "SKILL.md"
+_SKILL_FILENAMES = ("SKILL.md", "skill.md")
 _SKILL_DELIMITER = "===SKILL_FILE==="
-
-
-def _parse_frontmatter(raw: str) -> tuple[dict[str, str], str]:
-    """Parse YAML-like frontmatter from a SKILL.md file.
-
-    Supports only simple ``key: value`` lines between ``---`` delimiters.
-    Returns (metadata_dict, body_text).
-
-    Args:
-        raw: The full SKILL.md content.
-
-    Returns:
-        A tuple of (frontmatter dict, markdown body after the closing ---).
-
-    Raises:
-        ValueError: If the file does not start with ``---`` or has no closing delimiter.
-    """
-    stripped = raw.strip()
-    if not stripped.startswith("---"):
-        msg = "SKILL.md must start with '---' frontmatter delimiter"
-        raise ValueError(msg)
-
-    # Find closing ---
-    end_idx = stripped.find("---", 3)
-    if end_idx == -1:
-        msg = "SKILL.md missing closing '---' frontmatter delimiter"
-        raise ValueError(msg)
-
-    frontmatter_block = stripped[3:end_idx].strip()
-    body = stripped[end_idx + 3 :].strip()
-
-    metadata: dict[str, str] = {}
-    for raw_line in frontmatter_block.splitlines():
-        stripped_line = raw_line.strip()
-        if not stripped_line:
-            continue
-        colon_idx = stripped_line.find(":")
-        if colon_idx == -1:
-            continue
-        key = stripped_line[:colon_idx].strip()
-        value = stripped_line[colon_idx + 1 :].strip()
-        metadata[key] = value
-
-    return metadata, body
 
 
 class SkillResolver:
@@ -131,7 +89,7 @@ class SkillResolver:
         """Scan search paths for skill directories and parse metadata.
 
         Each subdirectory containing a SKILL.md file is treated as a skill.
-        The SKILL.md frontmatter must contain ``name`` and ``description``.
+        The SKILL.md frontmatter is validated against the Agent Skills spec.
 
         Uses a single shell command per search path to batch discovery,
         avoiding N+1 round-trip overhead with remote computers.
@@ -143,43 +101,34 @@ class SkillResolver:
         discovered: list[Skill] = []
 
         for base_path in self._search_paths:
-            # Single batched command: find all SKILL.md files, print
-            # delimiter + directory path + file content for each.
+            # Single batched command: find SKILL.md or skill.md files,
+            # print delimiter + directory path + file content for each.
             # Uses shell glob (no `find` dependency) and quoting.
-            cmd = (
-                f'for f in "{base_path}"/*/{_SKILL_FILENAME}; do '
-                f'[ -f "$f" ] && '
-                f'printf "{_SKILL_DELIMITER}:%s\\n" "$(dirname "$f")" && '
-                f'cat "$f" && printf "\\n"; '
-                f"done"
-            )
+            # Iterates both casing variants; only the first match per
+            # directory wins because duplicates are filtered downstream.
+            globs = " ".join(f'"{base_path}"/*/{name}' for name in _SKILL_FILENAMES)
+            cmd = f'for f in {globs}; do [ -f "$f" ] && printf "{_SKILL_DELIMITER}:%s\\n" "$(dirname "$f")" && cat "$f" && printf "\\n"; done'
             result = await self._computer.run(cmd)
             if result.exit_code != 0 or not result.stdout.strip():
                 continue
 
-            # Parse batched output into individual skill chunks
+            # Parse batched output into individual skill chunks.
+            # A directory may appear twice (SKILL.md + skill.md); first wins.
+            seen_dirs: set[str] = set()
             for skill_dir, raw_content in self._parse_batch_output(result.stdout):
+                if skill_dir in seen_dirs:
+                    continue
+                seen_dirs.add(skill_dir)
+
                 try:
-                    metadata, body = _parse_frontmatter(raw_content)
-                except ValueError:
-                    logger.warning("Skipping %s: invalid SKILL.md frontmatter", skill_dir)
+                    spec = parse_skill_md(raw_content)
+                except SkillError:
+                    logger.warning("Skipping %s: invalid SKILL.md", skill_dir)
                     continue
 
-                name = metadata.get("name")
-                description = metadata.get("description")
-                if not name or not description:
-                    logger.warning(
-                        "Skipping %s: SKILL.md missing 'name' or 'description'",
-                        skill_dir,
-                    )
-                    continue
-
-                if not body:
-                    logger.warning("Skipping %s: SKILL.md has no content body", skill_dir)
-                    continue
-
-                skill = Skill(name=name, description=description, path=skill_dir)
-                self._skills[name] = skill
+                fm = spec.frontmatter
+                skill = Skill(name=fm.name, description=fm.description, path=skill_dir)
+                self._skills[fm.name] = skill
                 discovered.append(skill)
 
         return discovered
@@ -198,31 +147,33 @@ class SkillResolver:
 
         Raises:
             KeyError: If the skill name was not discovered.
-            RuntimeError: If the SKILL.md content cannot be read.
+            RuntimeError: If the SKILL.md content cannot be read or parsed.
         """
         if name not in self._skills:
             msg = f"Skill not discovered: {name}"
             raise KeyError(msg)
 
         skill = self._skills[name]
-        skill_file = f"{skill.path}/{_SKILL_FILENAME}"
 
-        result = await self._computer.run(f'cat "{skill_file}"')
-        if result.exit_code != 0:
-            msg = f"Failed to read {skill_file}: {result.stderr}"
+        # Try each accepted filename casing
+        result = None
+        for filename in _SKILL_FILENAMES:
+            skill_file = f"{skill.path}/{filename}"
+            result = await self._computer.run(f'cat "{skill_file}"')
+            if result.exit_code == 0:
+                break
+
+        if result is None or result.exit_code != 0:
+            msg = f"Failed to read SKILL.md in {skill.path}: {result.stderr if result else 'no file found'}"
             raise RuntimeError(msg)
 
         try:
-            _metadata, body = _parse_frontmatter(result.stdout)
-        except ValueError as exc:
+            spec = parse_skill_md(result.stdout)
+        except SkillError as exc:
             msg = f"Failed to parse {skill_file}: {exc}"
             raise RuntimeError(msg) from exc
 
-        if not body:
-            msg = f"Skill '{name!r}' has no content body in {skill_file}"
-            raise RuntimeError(msg)
-
-        return f"Base directory for this skill: {skill.path}\n\n{body}"
+        return f"Base directory for this skill: {skill.path}\n\n{spec.body}"
 
     @staticmethod
     def _parse_batch_output(output: str) -> list[tuple[str, str]]:
