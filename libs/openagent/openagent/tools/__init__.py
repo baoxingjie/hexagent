@@ -48,6 +48,7 @@ from openagent.tools.skill import SkillTool
 from openagent.tools.task import TaskOutputTool, TaskStopTool
 from openagent.tools.task.agent import AgentTool
 from openagent.tools.todo import TodoWriteTool
+from openagent.tools.ui import PresentToUserTool
 from openagent.tools.web import (
     WebFetchTool,
     WebSearchTool,
@@ -87,6 +88,7 @@ __all__ = [
     "EditTool",
     "GlobTool",
     "GrepTool",
+    "PresentToUserTool",
     "ReadTool",
     "SkillTool",
     "SubagentResult",

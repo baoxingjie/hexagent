@@ -510,6 +510,17 @@ class TodoWriteToolParams(BaseModel):
     todos: list[TodoItem] = Field(description="The updated todo list")
 
 
+class PresentToUserToolParams(BaseModel):
+    """Input schema for the PresentFiles tool."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    filepaths: list[str] = Field(
+        min_length=1,
+        description="Array of file paths identifying which files to present to the user",
+    )
+
+
 # Runtime Types
 
 
