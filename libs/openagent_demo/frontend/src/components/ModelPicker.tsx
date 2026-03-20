@@ -3,20 +3,6 @@ import { Check, ChevronDown } from "lucide-react";
 import { useAppContext } from "../store";
 import { updateConversation } from "../api";
 
-/** Extract a short provider label from a base_url. */
-function providerFromUrl(url: string): string {
-  try {
-    const host = new URL(url).hostname;
-    if (host.includes("openrouter")) return "OpenRouter";
-    if (host.includes("openai")) return "OpenAI";
-    if (host.includes("anthropic")) return "Anthropic";
-    if (host.includes("google")) return "Google";
-    if (host.includes("deepseek")) return "DeepSeek";
-    return host.replace("www.", "").split(".")[0];
-  } catch {
-    return "";
-  }
-}
 
 export default function ModelPicker({ dropUp }: { dropUp?: boolean }) {
   const { state, dispatch } = useAppContext();

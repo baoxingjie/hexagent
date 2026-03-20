@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import shlex
+import shutil
 import tempfile
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
@@ -57,6 +58,7 @@ async def create_session(body: SessionCreateRequest | None = None) -> dict:
                 mode, session_name=None, working_dir=working_dir,
             )
         except VMMountConflictError as exc:
+            await agent_manager.teardown_session(mode, session.session_name)
             session_store.delete(session.id)
             raise HTTPException(status_code=409, detail=str(exc)) from None
 
@@ -79,16 +81,15 @@ async def create_session(body: SessionCreateRequest | None = None) -> dict:
         import asyncio
 
         async def _warm_agent() -> None:
-            async with agent_manager.conversation_lock(session.id):
-                try:
-                    await agent_manager.ensure_agent(
-                        model_id, mode, session.session_name, working_dir=working_dir,
-                    )
-                except Exception:
-                    logger.warning(
-                        "Eager agent creation failed for session %s (will retry on first message)",
-                        session.id,
-                    )
+            try:
+                await agent_manager.ensure_agent(
+                    model_id, mode, session.session_name, working_dir=working_dir,
+                )
+            except Exception:
+                logger.warning(
+                    "Eager agent creation failed for session %s (will retry on first message)",
+                    session.id,
+                )
 
         asyncio.create_task(_warm_agent())
 
@@ -204,3 +205,19 @@ async def delete_session_file(session_id: str, filename: str) -> dict[str, str]:
 
     logger.info("Deleted file from session %s: %s", session_id, filename)
     return {"deleted": filename}
+
+
+@router.delete("/api/sessions/{session_id}", status_code=204)
+async def delete_session(session_id: str) -> None:
+    """Explicitly tear down a warm session and its resources."""
+    session = session_store.claim(session_id)
+    if session is None:
+        return  # already claimed or expired — no-op
+
+    await agent_manager.teardown_session(session.mode, session.session_name)
+
+    uploads = UPLOADS_DIR / session_id
+    if uploads.is_dir():
+        shutil.rmtree(uploads)
+
+    logger.info("Deleted warm session: %s", session_id)

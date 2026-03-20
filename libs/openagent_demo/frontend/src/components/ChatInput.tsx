@@ -39,13 +39,26 @@ function shouldShowScrollButton(container: HTMLElement, inputContainer: HTMLElem
 export default function ChatInput({ conversationId, onSend, scrollContainerRef, onOpenSettings }: ChatInputProps) {
   const { state, dispatch } = useAppContext();
   const noModels = !state.serverConfig?.models?.length;
+  const missingE2bKey = state.selectedMode === "chat" && !state.serverConfig?.sandbox?.e2b_api_key;
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const [e2bHintFlash, setE2bHintFlash] = useState(false);
+  const e2bHintTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  /** Flash the E2B hint briefly (for button clicks). */
+  const flashE2bHint = useCallback(() => {
+    setE2bHintFlash(true);
+    if (e2bHintTimer.current) clearTimeout(e2bHintTimer.current);
+    e2bHintTimer.current = setTimeout(() => setE2bHintFlash(false), 3000);
+  }, []);
+
+  // Cleanup timer on unmount
+  useEffect(() => () => { if (e2bHintTimer.current) clearTimeout(e2bHintTimer.current); }, []);
 
   const checkScrollBtn = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -77,6 +90,7 @@ export default function ChatInput({ conversationId, onSend, scrollContainerRef, 
   const anyUploading = pendingFiles.some((f) => f.status === "uploading");
 
   const handleSubmit = useCallback(() => {
+    if (missingE2bKey) { flashE2bHint(); return; }
     const trimmed = value.trim();
     const hasContent = trimmed || doneFiles.length > 0;
     if (!hasContent || state.isStreaming || anyUploading) return;
@@ -88,7 +102,7 @@ export default function ChatInput({ conversationId, onSend, scrollContainerRef, 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-  }, [value, doneFiles, anyUploading, state.isStreaming, onSend]);
+  }, [value, doneFiles, anyUploading, state.isStreaming, onSend, missingE2bKey, flashE2bHint]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -267,7 +281,7 @@ export default function ChatInput({ conversationId, onSend, scrollContainerRef, 
               <button
                 className="input-tool-btn"
                 title="Attach file"
-                onClick={() => fileRef.current?.click()}
+                onClick={() => { if (missingE2bKey) { flashE2bHint(); return; } fileRef.current?.click(); }}
               >
                 <Paperclip />
               </button>
@@ -275,14 +289,24 @@ export default function ChatInput({ conversationId, onSend, scrollContainerRef, 
             </div>
             <div className="input-toolbar-right">
               <ModelPicker dropUp />
-              <button
-                className="input-send"
-                onClick={handleSubmit}
-                disabled={(!value.trim() && doneFiles.length === 0) || state.isStreaming || anyUploading || noModels}
-                title={noModels ? "Configure a model in Settings first" : "Send message"}
-              >
-                <ArrowUp />
-              </button>
+              <div className="input-send-wrapper">
+                <button
+                  className="input-send"
+                  onClick={handleSubmit}
+                  disabled={(!value.trim() && doneFiles.length === 0) || state.isStreaming || anyUploading || noModels || missingE2bKey}
+                  title={noModels ? "Configure a model in Settings first" : "Send message"}
+                >
+                  <ArrowUp />
+                </button>
+                {missingE2bKey && (
+                  <div className={`e2b-hint${value.trim() || e2bHintFlash ? " e2b-hint-visible" : ""}`}>
+                    E2B API key required —{" "}
+                    <button className="e2b-hint-link" onClick={() => onOpenSettings("sandbox")}>
+                      Set in Settings
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

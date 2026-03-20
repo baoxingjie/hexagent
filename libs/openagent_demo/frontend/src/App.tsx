@@ -1,6 +1,6 @@
 import { useReducer, useEffect, useCallback, useRef, useState } from "react";
 import { AppContext, initialState, reducer } from "./store";
-import { listConversations, createConversation, createWarmSession, sendMessage, getServerConfig } from "./api";
+import { listConversations, createConversation, createWarmSession, deleteWarmSession, sendMessage, getServerConfig } from "./api";
 import { useSettings } from "./hooks/useSettings";
 import Sidebar from "./components/Sidebar";
 import ChatArea from "./components/ChatArea";
@@ -148,9 +148,13 @@ function App() {
 
   // Eagerly create a warm session when user lands on the welcome screen
   const warmingRef = useRef(false);
+  const warmSessionPromiseRef = useRef<Promise<string> | null>(null);
+  // Track previous warmSessionId for teardown on mode switch
+  const prevWarmSessionIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (state.activeConversationId) {
       warmingRef.current = false;
+      warmSessionPromiseRef.current = null;
       return;
     }
     if (!initialLoadDone.current) return;
@@ -160,14 +164,32 @@ function App() {
 
     const mode = state.selectedMode;
     const modelId = state.selectedModelId || undefined;
-    createWarmSession(mode, modelId)
+    const p = createWarmSession(mode, modelId)
       .then((session) => {
         dispatch({ type: "SET_WARM_SESSION", payload: session.session_id });
+        return session.session_id;
+      });
+    warmSessionPromiseRef.current = p;
+    p.catch(() => {
+        dispatch({ type: "SHOW_NOTIFICATION", payload: {
+          message: "Session setup failed. You can still send messages.",
+          type: "info",
+        }});
       })
-      .catch(() => {})
       .finally(() => { warmingRef.current = false; });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.activeConversationId, state.warmSessionId, state.selectedMode]);
+
+  // Tear down backend warm session when it's cleared by mode switch
+  useEffect(() => {
+    const prev = prevWarmSessionIdRef.current;
+    prevWarmSessionIdRef.current = state.warmSessionId;
+    // If warmSessionId went from a value to null and there's no active conversation
+    // (conversation creation claims the session server-side, no need to delete)
+    if (prev && !state.warmSessionId && !state.activeConversationId) {
+      deleteWarmSession(prev).catch(() => {});
+    }
+  }, [state.warmSessionId, state.activeConversationId]);
 
   // Reference for doSendMessage to access latest conversations
   const conversationsRef = useRef(state.conversations);
@@ -284,7 +306,11 @@ function App() {
       const modelId = state.selectedModelId || undefined;
       const mode = state.selectedMode;
       const workingDir = options?.workingDir;
-      const sessionId = state.warmSessionId || undefined;
+      // Wait for in-flight warm session if user sent before it resolved
+      let sessionId = state.warmSessionId || undefined;
+      if (!sessionId && warmSessionPromiseRef.current) {
+        try { sessionId = await warmSessionPromiseRef.current; } catch { /* proceed without */ }
+      }
 
       try {
         const conv = await createConversation(modelId, mode, workingDir, sessionId);

@@ -28,8 +28,13 @@ logger = logging.getLogger(__name__)
 async def _cleanup_expired_sessions() -> None:
     """Periodically tear down unclaimed warm sessions."""
     import asyncio
+    import shutil
+    import tempfile
+    from pathlib import Path
 
     from openagent_api.store import session_store
+
+    uploads_dir = Path(tempfile.gettempdir()) / "openagent_uploads"
 
     while True:
         await asyncio.sleep(300)  # every 5 minutes
@@ -38,6 +43,10 @@ async def _cleanup_expired_sessions() -> None:
                 logger.info("Cleaning up expired warm session: %s", session.id)
                 await agent_manager.teardown_session(session.mode, session.session_name)
                 session_store.delete(session.id)
+                # Clean up any upload files left on disk
+                session_uploads = uploads_dir / session.id
+                if session_uploads.is_dir():
+                    shutil.rmtree(session_uploads)
         except Exception:
             logger.exception("Error during session cleanup")
 

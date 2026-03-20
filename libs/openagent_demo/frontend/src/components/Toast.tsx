@@ -29,14 +29,19 @@ function ToastItem({
 }) {
   const [exiting, setExiting] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const duration = notification.type === "error" ? 15000 : 8000;
+  const duration = notification.type === "error" ? 10000 : 5000;
+
+  // Stable refs so the timer callback never goes stale
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
 
   const dismiss = useCallback(() => {
     setExiting(true);
-    setTimeout(() => onDismiss(notification.id), SLIDE_OUT_MS);
-  }, [notification.id, onDismiss]);
+    setTimeout(() => onDismissRef.current(notification.id), SLIDE_OUT_MS);
+  }, [notification.id]);
 
   const startTimer = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(dismiss, duration);
   }, [dismiss, duration]);
 
@@ -47,6 +52,7 @@ function ToastItem({
     }
   }, []);
 
+  // Start timer once on mount — stable deps prevent restarts
   useEffect(() => {
     startTimer();
     return clearTimer;

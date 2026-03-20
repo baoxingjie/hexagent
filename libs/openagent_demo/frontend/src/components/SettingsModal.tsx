@@ -4,7 +4,7 @@ import type { Settings } from "../hooks/useSettings";
 import { getServerConfig, updateServerConfig, testMcpConnection, browseFolder, listSkills, uploadSkill, deleteSkill, toggleSkill, installSkill } from "../api";
 import { useAppContext } from "../store";
 import type { ServerConfig, ModelConfig, AgentConfig } from "../api";
-import { loadRecentFolders, saveRecentFolders, shortenPath } from "../recentFolders";
+import { loadRecentFolders, saveRecentFolders } from "../recentFolders";
 import type { RecentFolder } from "../recentFolders";
 
 interface SettingsModalProps {
@@ -47,29 +47,6 @@ export default function SettingsModal({ open, onClose, settings, onSettingsChang
 
   // Reset dirty state when switching tabs
   useEffect(() => { setDirty(false); saveRef.current = null; }, [activeTab]);
-
-  const handleClose = useCallback(() => {
-    if (dirty) {
-      setShowConfirm(true);
-    } else {
-      onClose();
-    }
-  }, [dirty, onClose]);
-
-  const handleDiscard = useCallback(() => {
-    setShowConfirm(false);
-    setDirty(false);
-    onClose();
-  }, [onClose]);
-
-  const handleSaveAndClose = useCallback(async () => {
-    if (saveRef.current) {
-      await saveRef.current();
-    }
-    setShowConfirm(false);
-    setDirty(false);
-    onClose();
-  }, [onClose]);
 
   // Exit animation state: "open" | "closing"
   const [animState, setAnimState] = useState<"open" | "closing">("open");
@@ -339,7 +316,7 @@ function ModelTab() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showAddPicker, setShowAddPicker] = useState(false);
   const [showKey, setShowKey] = useState<Record<string, boolean>>({});
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<{ idx: number; half: "top" | "bottom" } | null>(null);
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -389,7 +366,7 @@ function ModelTab() {
     if (next.main_model_id === id) next.main_model_id = next.models[0]?.id ?? "";
     if (next.fast_model_id === id) next.fast_model_id = "";
     setConfig(next);
-    setConfirmingDeleteId(null);
+    setDeleteConfirm(null);
     if (expandedId === id) setExpandedId(null);
     markDirty();
   };
@@ -503,13 +480,9 @@ function ModelTab() {
                       className="settings-del"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (confirmingDeleteId === m.id) {
-                          deleteModel(m.id);
-                        } else {
-                          setConfirmingDeleteId(m.id);
-                        }
+                        setDeleteConfirm({ id: m.id, name: m.display_name || m.model || "Untitled" });
                       }}
-                      title={confirmingDeleteId === m.id ? "Click again to confirm" : "Delete"}
+                      title="Delete"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -517,14 +490,6 @@ function ModelTab() {
                   {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                 </div>
               </div>
-
-              {confirmingDeleteId === m.id && !expanded && (
-                <div className="ml-confirm-bar">
-                  <span>Delete this model?</span>
-                  <button className="mc-confirm-yes" onClick={() => deleteModel(m.id)}>Delete</button>
-                  <button className="mc-confirm-no" onClick={() => setConfirmingDeleteId(null)}>Cancel</button>
-                </div>
-              )}
 
               {/* Expanded edit form */}
               <div className={`ml-edit-wrap ${expanded ? "ml-edit-wrap--open" : ""}`}>
@@ -711,6 +676,26 @@ function ModelTab() {
           )}
         </button>
       </div>
+
+      {/* Delete confirmation dialog */}
+      {deleteConfirm && (
+        <div className="settings-confirm-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="settings-confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <h3 className="settings-confirm-title">Delete &ldquo;<span className="settings-confirm-name">{deleteConfirm.name}</span>&rdquo;?</h3>
+            <p className="settings-confirm-body">
+              This will permanently remove the model configuration. This action cannot be undone.
+            </p>
+            <div className="settings-confirm-actions">
+              <button className="settings-confirm-btn" onClick={() => setDeleteConfirm(null)}>
+                Cancel
+              </button>
+              <button className="settings-confirm-btn settings-confirm-btn--discard" onClick={() => { deleteModel(deleteConfirm.id); setDeleteConfirm(null); }}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -866,7 +851,7 @@ function McpTab() {
   const { dispatch } = useAppContext();
   const [servers, setServers] = useState<McpServer[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [showAddPicker, setShowAddPicker] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [testStatus, setTestStatus] = useState<Record<string, { loading?: boolean; ok?: boolean; tools?: number; error?: string }>>({});
@@ -1077,7 +1062,7 @@ function McpTab() {
   const deleteServer = useCallback(
     (id: string) => {
       setServers((prev) => prev.filter((s) => s.id !== id));
-      setConfirmingDeleteId(null);
+      setDeleteConfirm(null);
       if (expandedId === id) setExpandedId(null);
       markDirty();
     },
@@ -1167,27 +1152,15 @@ function McpTab() {
                     className="settings-del"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (confirmingDeleteId === server.id) {
-                        deleteServer(server.id);
-                      } else {
-                        setConfirmingDeleteId(server.id);
-                      }
+                      setDeleteConfirm({ id: server.id, name: server.name || "Untitled" });
                     }}
-                    title={confirmingDeleteId === server.id ? "Click again to confirm" : "Delete"}
+                    title="Delete"
                   >
                     <Trash2 size={14} />
                   </button>
                   {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                 </div>
               </div>
-
-              {confirmingDeleteId === server.id && !expanded && (
-                <div className="ml-confirm-bar">
-                  <span>Delete this server?</span>
-                  <button className="mc-confirm-yes" onClick={() => deleteServer(server.id)}>Delete</button>
-                  <button className="mc-confirm-no" onClick={() => setConfirmingDeleteId(null)}>Cancel</button>
-                </div>
-              )}
 
               {/* Expanded edit form */}
               <div className={`ml-edit-wrap ${expanded ? "ml-edit-wrap--open" : ""}`}>
@@ -1308,6 +1281,26 @@ function McpTab() {
           <button className="model-add-btn" onClick={() => setShowAddPicker(true)}>
             <Plus size={16} /> Add MCP Server
           </button>
+        </div>
+      )}
+
+      {/* Delete confirmation dialog */}
+      {deleteConfirm && (
+        <div className="settings-confirm-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="settings-confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <h3 className="settings-confirm-title">Delete &ldquo;<span className="settings-confirm-name">{deleteConfirm.name}</span>&rdquo;?</h3>
+            <p className="settings-confirm-body">
+              This will permanently remove the MCP server. This action cannot be undone.
+            </p>
+            <div className="settings-confirm-actions">
+              <button className="settings-confirm-btn" onClick={() => setDeleteConfirm(null)}>
+                Cancel
+              </button>
+              <button className="settings-confirm-btn settings-confirm-btn--discard" onClick={() => { deleteServer(deleteConfirm.id); setDeleteConfirm(null); }}>
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -1625,7 +1618,7 @@ function SubagentTab() {
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   // Local string state for each agent's tools input to avoid comma-eating on keystroke
   const [toolsText, setToolsText] = useState<Record<string, string>>({});
 
@@ -1673,7 +1666,7 @@ function SubagentTab() {
     if (!config) return;
     setConfig({ ...config, agents: (config.agents ?? []).filter((a) => a.id !== id) });
     setToolsText((prev) => { const next = { ...prev }; delete next[id]; return next; });
-    setConfirmingDeleteId(null);
+    setDeleteConfirm(null);
     if (expandedId === id) setExpandedId(null);
     markDirty();
   };
@@ -1753,27 +1746,15 @@ function SubagentTab() {
                     className="settings-del"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (confirmingDeleteId === agent.id) {
-                        deleteAgent(agent.id);
-                      } else {
-                        setConfirmingDeleteId(agent.id);
-                      }
+                      setDeleteConfirm({ id: agent.id, name: agent.name || "Untitled" });
                     }}
-                    title={confirmingDeleteId === agent.id ? "Click again to confirm" : "Delete"}
+                    title="Delete"
                   >
                     <Trash2 size={14} />
                   </button>
                   {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                 </div>
               </div>
-
-              {confirmingDeleteId === agent.id && !expanded && (
-                <div className="ml-confirm-bar">
-                  <span>Delete this agent?</span>
-                  <button className="mc-confirm-yes" onClick={() => deleteAgent(agent.id)}>Delete</button>
-                  <button className="mc-confirm-no" onClick={() => setConfirmingDeleteId(null)}>Cancel</button>
-                </div>
-              )}
 
               <div className={`ml-edit-wrap ${expanded ? "ml-edit-wrap--open" : ""}`}>
                 <div className="ml-edit">
@@ -1884,6 +1865,26 @@ function SubagentTab() {
           )}
         </button>
       </div>
+
+      {/* Delete confirmation dialog */}
+      {deleteConfirm && (
+        <div className="settings-confirm-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="settings-confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <h3 className="settings-confirm-title">Delete &ldquo;<span className="settings-confirm-name">{deleteConfirm.name}</span>&rdquo;?</h3>
+            <p className="settings-confirm-body">
+              This will permanently remove the agent. This action cannot be undone.
+            </p>
+            <div className="settings-confirm-actions">
+              <button className="settings-confirm-btn" onClick={() => setDeleteConfirm(null)}>
+                Cancel
+              </button>
+              <button className="settings-confirm-btn settings-confirm-btn--discard" onClick={() => { deleteAgent(deleteConfirm.id); setDeleteConfirm(null); }}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2078,6 +2079,7 @@ function SandboxTab() {
           )}
         </button>
       </div>
+
     </div>
   );
 }
@@ -2214,7 +2216,7 @@ function SkillsTab() {
       {deleteConfirm && (
         <div className="settings-confirm-overlay" onClick={() => setDeleteConfirm(null)}>
           <div className="settings-confirm-dialog" onClick={(e) => e.stopPropagation()}>
-            <h3 className="settings-confirm-title">Remove "{deleteConfirm.name}"?</h3>
+            <h3 className="settings-confirm-title">Remove &ldquo;<span className="settings-confirm-name">{deleteConfirm.name}</span>&rdquo;?</h3>
             <p className="settings-confirm-body">
               {deleteConfirm.builtin
                 ? "This skill will be moved to Examples. You can always install it back later."

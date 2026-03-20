@@ -1,6 +1,14 @@
 import type { Conversation } from "./types";
 
-const API_BASE = "";
+const API_BASE = (() => {
+  if (typeof window !== 'undefined' && window.electronAPI?.backendPort) {
+    const base = `http://localhost:${window.electronAPI.backendPort}`;
+    console.log('[api] Electron mode, API_BASE:', base);
+    return base;
+  }
+  console.log('[api] Browser mode, API_BASE: (empty, using relative URLs)');
+  return '';
+})();
 
 export async function listConversations(): Promise<Conversation[]> {
   const res = await fetch(`${API_BASE}/api/conversations`);
@@ -43,6 +51,10 @@ export async function createWarmSession(mode: string, modelId?: string, workingD
   });
   if (!res.ok) throw new Error(`Failed to create session: ${res.statusText}`);
   return res.json();
+}
+
+export async function deleteWarmSession(sessionId: string): Promise<void> {
+  await fetch(`${API_BASE}/api/sessions/${sessionId}`, { method: "DELETE" });
 }
 
 export async function updateWarmSession(sessionId: string, updates: { working_dir?: string }): Promise<WarmSessionResponse> {

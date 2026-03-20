@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import zipfile
 from pathlib import Path
@@ -19,11 +20,19 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
-SKILLS_DIR = Path(__file__).resolve().parent.parent.parent / "skills"
+
+def _resolve_skills_dir() -> Path:
+    data_dir = os.environ.get("OPENAGENT_DATA_DIR")
+    if data_dir:
+        return Path(data_dir) / "skills"
+    return Path(__file__).resolve().parent.parent.parent / "skills"
+
+
+SKILLS_DIR = _resolve_skills_dir()
 PUBLIC_DIR = SKILLS_DIR / "public"
 USER_DIR = SKILLS_DIR / "user"
 EXAMPLES_DIR = SKILLS_DIR / "examples"
-INACTIVE_DIR = Path(__file__).resolve().parent.parent.parent / "skills-inactive"
+INACTIVE_DIR = SKILLS_DIR.parent / "skills-inactive"
 
 ACCEPTED_EXTENSIONS = (".zip", ".skill")
 

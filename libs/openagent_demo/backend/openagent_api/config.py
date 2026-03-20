@@ -4,13 +4,23 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
+
+def _resolve_config_path() -> Path:
+    """Resolve config.json path, preferring OPENAGENT_DATA_DIR if set."""
+    data_dir = os.environ.get("OPENAGENT_DATA_DIR")
+    if data_dir:
+        return Path(data_dir) / "config.json"
+    return Path(__file__).resolve().parent.parent / "config.json"
+
+
+CONFIG_PATH = _resolve_config_path()
 
 
 @dataclass

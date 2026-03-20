@@ -150,6 +150,10 @@ export default function OnboardingWizard({ open, onComplete }: OnboardingWizardP
       setError("Please go back and configure your AI model first");
       return;
     }
+    if (!e2bKey.trim()) {
+      setError("E2B API key is required. Please go back and enter it in the Compute step.");
+      return;
+    }
 
     setSaving(true);
     setError("");
@@ -673,7 +677,7 @@ export default function OnboardingWizard({ open, onComplete }: OnboardingWizardP
               <div>
                 <h2 className="setup-title">Compute environments</h2>
                 <p className="setup-subtitle">
-                  OpenAgent uses sandboxed environments to run code safely. Both are optional.
+                  OpenAgent uses sandboxed environments to run code safely. E2B is required for Chat mode.
                 </p>
               </div>
             </div>
@@ -691,7 +695,7 @@ export default function OnboardingWizard({ open, onComplete }: OnboardingWizardP
                   </div>
                 </div>
                 <p className="setup-compute-desc">
-                  Cloud sandbox for safe code execution. Get a free key at <a href="https://e2b.dev" target="_blank" rel="noreferrer">e2b.dev</a>
+                  Cloud sandbox for safe code execution (required). Get a free key at <a href="https://e2b.dev" target="_blank" rel="noreferrer">e2b.dev</a>
                 </p>
                 <div className="setup-field">
                   <label className="setup-label">API Key</label>
@@ -732,7 +736,11 @@ export default function OnboardingWizard({ open, onComplete }: OnboardingWizardP
 
             <div className="setup-actions">
               <button className="setup-btn setup-btn--ghost" onClick={goBack}>Back</button>
-              <button className="setup-btn setup-btn--primary" onClick={goNext}>
+              <button
+                className="setup-btn setup-btn--primary"
+                onClick={goNext}
+                disabled={!e2bKey.trim()}
+              >
                 Next <ArrowRight size={14} />
               </button>
             </div>

@@ -436,7 +436,7 @@ export function reducer(state: AppState, action: Action): AppState {
           ...c,
           messages: (c.messages ?? []).map((m) => ({
             ...m,
-            created_at: m.created_at || (m as Record<string, unknown>).timestamp as string || "",
+            created_at: m.created_at || (m as unknown as Record<string, unknown>).timestamp as string || "",
           })),
         })),
       };

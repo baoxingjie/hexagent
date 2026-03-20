@@ -44,6 +44,8 @@ class AgentManager:
         self._vm_manager: Any | None = None
         self._conv_locks: dict[str, asyncio.Lock] = {}
         self._setup_lock = asyncio.Lock()
+        # Per-cache-key locks to prevent duplicate agent creation
+        self._agent_locks: dict[tuple[str, str], asyncio.Lock] = {}
         # session_name -> (working_dir_source, mount_target)
         self._session_working_dirs: dict[str, tuple[str, str]] = {}
 
@@ -78,15 +80,25 @@ class AgentManager:
                 from openagent_api.config import load_config
 
                 cfg = load_config()
-                e2b_key = cfg.sandbox.e2b_api_key
-                if e2b_key:
-                    os.environ["E2B_API_KEY"] = e2b_key
+                e2b_key = cfg.sandbox.e2b_api_key or os.environ.get("E2B_API_KEY", "")
+                if not e2b_key:
+                    raise RuntimeError(
+                        "E2B API key not configured. "
+                        "Please set it in Settings > Sandbox."
+                    )
+                os.environ["E2B_API_KEY"] = e2b_key
 
                 from openagent.computer.remote.e2b import RemoteE2BComputer
 
                 logger.info("Starting RemoteE2BComputer for chat mode...")
-                computer = RemoteE2BComputer()
-                await computer.start()
+                computer = RemoteE2BComputer(template="openagent")
+                try:
+                    await asyncio.wait_for(computer.start(), timeout=30)
+                except asyncio.TimeoutError:
+                    raise RuntimeError(
+                        "E2B sandbox creation timed out after 30s. "
+                        "Check your network connection and E2B API key."
+                    )
                 self._computers["chat"] = computer
                 return computer, "chat"
 
@@ -170,123 +182,132 @@ class AgentManager:
         if cache_key in self._agents:
             return self._agents[cache_key], session_key
 
-        from dotenv import load_dotenv
+        # Acquire a per-key lock to prevent duplicate agent creation when
+        # _warm_agent() and the chat route race on the same session.
+        if cache_key not in self._agent_locks:
+            self._agent_locks[cache_key] = asyncio.Lock()
+        async with self._agent_locks[cache_key]:
+            # Re-check after acquiring lock — another caller may have created it
+            if cache_key in self._agents:
+                return self._agents[cache_key], session_key
 
-        load_dotenv()
+            from dotenv import load_dotenv
 
-        from langchain_anthropic import ChatAnthropic
-        from langchain_deepseek import ChatDeepSeek
-        from langchain_openai import ChatOpenAI
-        from openagent import create_agent
-        from openagent.computer.base import SESSION_OUTPUTS_DIR
-        from openagent.harness.definition import AgentDefinition
-        from openagent.harness.model import ModelProfile
-        from openagent.tools import PresentToUserTool
-        from openagent.tools.web import (
-            BraveSearchProvider,
-            FetchProvider,
-            FirecrawlFetchProvider,
-            JinaFetchProvider,
-            SearchProvider,
-            TavilySearchProvider,
-        )
+            load_dotenv()
 
-        from openagent_api.config import load_config
+            from langchain_anthropic import ChatAnthropic
+            from langchain_deepseek import ChatDeepSeek
+            from langchain_openai import ChatOpenAI
+            from openagent import create_agent
+            from openagent.computer.base import SESSION_OUTPUTS_DIR
+            from openagent.harness.definition import AgentDefinition
+            from openagent.harness.model import ModelProfile
+            from openagent.tools import PresentToUserTool
+            from openagent.tools.web import (
+                BraveSearchProvider,
+                FetchProvider,
+                FirecrawlFetchProvider,
+                JinaFetchProvider,
+                SearchProvider,
+                TavilySearchProvider,
+            )
 
-        cfg = load_config()
-        target = next((m for m in cfg.models if m.id == model_id), None)
-        if not target:
-            msg = f"Model config not found: {model_id}"
-            raise RuntimeError(msg)
+            from openagent_api.config import load_config
 
-        fast_cfg = cfg.fast_model or target
+            cfg = load_config()
+            target = next((m for m in cfg.models if m.id == model_id), None)
+            if not target:
+                msg = f"Model config not found: {model_id}"
+                raise RuntimeError(msg)
 
-        def _make_chat_model(mc: Any) -> Any:
-            if mc.provider == "anthropic":
-                return ChatAnthropic(
+            fast_cfg = cfg.fast_model or target
+
+            def _make_chat_model(mc: Any) -> Any:
+                if mc.provider == "anthropic":
+                    return ChatAnthropic(
+                        model=mc.model,
+                        api_key=mc.api_key,
+                        base_url=mc.base_url,
+                    )
+                if mc.provider == "deepseek":
+                    return ChatDeepSeek(
+                        model=mc.model,
+                        api_key=mc.api_key,
+                        api_base=mc.base_url,
+                    )
+                # Default: openai
+                return ChatOpenAI(
                     model=mc.model,
                     api_key=mc.api_key,
                     base_url=mc.base_url,
                 )
-            if mc.provider == "deepseek":
-                return ChatDeepSeek(
-                    model=mc.model,
-                    api_key=mc.api_key,
-                    api_base=mc.base_url,
+
+            main_model = ModelProfile(
+                model=_make_chat_model(target),
+                context_window=target.context_window,
+            )
+
+            fast_model = ModelProfile(
+                model=_make_chat_model(fast_cfg),
+                context_window=fast_cfg.context_window,
+            )
+
+            # Build agent definitions from config
+            agent_defs: dict[str, AgentDefinition] = {}
+            for ac in cfg.agents:
+                if not ac.enabled or not ac.name:
+                    continue
+                agent_defs[ac.name] = AgentDefinition(
+                    description=ac.description,
+                    system_prompt=ac.system_prompt,
+                    tools=tuple(ac.tools) if ac.tools else (),
                 )
-            # Default: openai
-            return ChatOpenAI(
-                model=mc.model,
-                api_key=mc.api_key,
-                base_url=mc.base_url,
+
+            # Build web tool providers from config
+            tc = cfg.tools
+            search: SearchProvider | None = None
+            if tc.search_provider == "tavily":
+                search = TavilySearchProvider(api_key=tc.search_api_key or None)
+            elif tc.search_provider == "brave":
+                search = BraveSearchProvider(api_key=tc.search_api_key or None)
+
+            fetch: FetchProvider | None = None
+            if tc.fetch_provider == "jina":
+                fetch = JinaFetchProvider(api_key=tc.fetch_api_key or None)
+            elif tc.fetch_provider == "firecrawl":
+                fetch = FirecrawlFetchProvider(api_key=tc.fetch_api_key or None)
+
+            logger.info(
+                "Creating agent for model=%s (%s) session=%s",
+                target.display_name, target.model, session_key,
             )
+            # Cowork sessions have skills mounted at /mnt/skills/{public,user}
+            skill_paths = ("/mnt/skills/public", "/mnt/skills/user") if mode != "chat" else ()
 
-        main_model = ModelProfile(
-            model=_make_chat_model(target),
-            context_window=target.context_window,
-        )
+            # PresentToUserTool output directory depends on mode
+            if session_key == "chat":
+                output_dir = f"/{SESSION_OUTPUTS_DIR}"
+            else:
+                output_dir = f"/sessions/{session_key}/{SESSION_OUTPUTS_DIR}"
 
-        fast_model = ModelProfile(
-            model=_make_chat_model(fast_cfg),
-            context_window=fast_cfg.context_window,
-        )
-
-        # Build agent definitions from config
-        agent_defs: dict[str, AgentDefinition] = {}
-        for ac in cfg.agents:
-            if not ac.enabled or not ac.name:
-                continue
-            agent_defs[ac.name] = AgentDefinition(
-                description=ac.description,
-                system_prompt=ac.system_prompt,
-                tools=tuple(ac.tools) if ac.tools else (),
+            agent = await create_agent(
+                model=main_model,
+                computer=computer,
+                fast_model=fast_model,
+                mcp_servers=self._get_mcp_servers(),
+                agents=agent_defs or None,
+                search_provider=search,
+                fetch_provider=fetch,
+                skill_paths=skill_paths,
+                extra_tools=[PresentToUserTool(computer=computer, output_dir=output_dir)],
             )
-
-        # Build web tool providers from config
-        tc = cfg.tools
-        search: SearchProvider | None = None
-        if tc.search_provider == "tavily":
-            search = TavilySearchProvider(api_key=tc.search_api_key or None)
-        elif tc.search_provider == "brave":
-            search = BraveSearchProvider(api_key=tc.search_api_key or None)
-
-        fetch: FetchProvider | None = None
-        if tc.fetch_provider == "jina":
-            fetch = JinaFetchProvider(api_key=tc.fetch_api_key or None)
-        elif tc.fetch_provider == "firecrawl":
-            fetch = FirecrawlFetchProvider(api_key=tc.fetch_api_key or None)
-
-        logger.info(
-            "Creating agent for model=%s (%s) session=%s",
-            target.display_name, target.model, session_key,
-        )
-        # Cowork sessions have skills mounted at /mnt/skills/{public,user}
-        skill_paths = ("/mnt/skills/public", "/mnt/skills/user") if mode != "chat" else ()
-
-        # PresentToUserTool output directory depends on mode
-        if session_key == "chat":
-            output_dir = f"/{SESSION_OUTPUTS_DIR}"
-        else:
-            output_dir = f"/sessions/{session_key}/{SESSION_OUTPUTS_DIR}"
-
-        agent = await create_agent(
-            model=main_model,
-            computer=computer,
-            fast_model=fast_model,
-            mcp_servers=self._get_mcp_servers(),
-            agents=agent_defs or None,
-            search_provider=search,
-            fetch_provider=fetch,
-            skill_paths=skill_paths,
-            extra_tools=[PresentToUserTool(computer=computer, output_dir=output_dir)],
-        )
-        self._agents[cache_key] = agent
-        logger.info("create_agent() returned: %r", agent)
-        logger.info(
-            "Agent ready for model=%s (%s) session=%s",
-            target.display_name, target.model, session_key,
-        )
-        return agent, session_key
+            self._agents[cache_key] = agent
+            logger.info("create_agent() returned: %r", agent)
+            logger.info(
+                "Agent ready for model=%s (%s) session=%s",
+                target.display_name, target.model, session_key,
+            )
+            return agent, session_key
 
     # ── Public API ──
 
@@ -315,7 +336,8 @@ class AgentManager:
 
         existing_guests = {m.guest_path for m in self._vm_manager.list_mounts()}
 
-        skills_base = Path(__file__).resolve().parent.parent / "skills"
+        data_dir = os.environ.get("OPENAGENT_DATA_DIR")
+        skills_base = Path(data_dir) / "skills" if data_dir else Path(__file__).resolve().parent.parent / "skills"
         skill_mounts: list[Mount] = []
         for subdir in ("public", "user"):
             skills_dir = skills_base / subdir
@@ -332,13 +354,22 @@ class AgentManager:
     async def start(self) -> None:
         """Initialize the agent manager.
 
-        Starts the VM and mounts skill directories so they are ready
-        before the first conversation.
+        Loads environment variables. VM initialization is deferred until
+        the first conversation that requires it (cowork mode), so the app
+        can start even without Lima installed.
         """
         from dotenv import load_dotenv
 
         load_dotenv()
-        await self._ensure_vm_manager()
+        # VM setup is lazy — _ensure_vm_manager() is called on demand
+        # when a cowork-mode conversation starts.
+        try:
+            await self._ensure_vm_manager()
+        except Exception:
+            logger.warning(
+                "VM manager not available (Lima not installed?). "
+                "Cowork mode will be unavailable; chat mode still works."
+            )
         logger.info("Agent manager initialized.")
 
     async def ensure_agent(
@@ -487,10 +518,11 @@ class AgentManager:
         if not session_name or session_name not in self._computers:
             return
         computer = self._computers.pop(session_name)
-        # Remove any agents cached for this session
+        # Remove any agents and their creation locks cached for this session
         keys_to_remove = [k for k in self._agents if k[1] == session_name]
         for key in keys_to_remove:
             agent = self._agents.pop(key)
+            self._agent_locks.pop(key, None)
             await agent.aclose()
             logger.info("Closed agent for %s", key)
         await computer.stop()

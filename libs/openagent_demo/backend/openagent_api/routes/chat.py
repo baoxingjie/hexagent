@@ -214,6 +214,9 @@ async def send_message(conversation_id: str, body: MessageRequest) -> StreamingR
             returned_session = await agent_manager.ensure_agent(model_id, mode, session_name, working_dir=working_dir)
         except VMMountConflictError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from None
+        except Exception as exc:
+            logger.exception("Failed to ensure agent")
+            raise HTTPException(status_code=500, detail=str(exc)) from None
         if mode == "cowork" and returned_session and returned_session != session_name:
             conv.session_name = returned_session
             session_name = returned_session

@@ -27,6 +27,9 @@ export default function WelcomeScreen({ onSubmit, mode, onOpenSettings }: Welcom
   const warmSessionId = state.warmSessionId;
   const isCowork = mode === "cowork";
   const noModels = !state.serverConfig?.models?.length;
+  const missingE2bKey = !isCowork && !state.serverConfig?.sandbox?.e2b_api_key;
+  const [e2bHintFlash, setE2bHintFlash] = useState(false);
+  const e2bHintTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   const chatPlaceholders = [
     "Imagine it, I'll make it happen...",
@@ -96,10 +99,19 @@ export default function WelcomeScreen({ onSubmit, mode, onOpenSettings }: Welcom
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  const flashE2bHint = useCallback(() => {
+    setE2bHintFlash(true);
+    if (e2bHintTimer.current) clearTimeout(e2bHintTimer.current);
+    e2bHintTimer.current = setTimeout(() => setE2bHintFlash(false), 3000);
+  }, []);
+
+  useEffect(() => () => { if (e2bHintTimer.current) clearTimeout(e2bHintTimer.current); }, []);
+
   const doneFiles = pendingFiles.filter((f) => f.status === "done");
   const anyUploading = pendingFiles.some((f) => f.status === "uploading");
 
   const handleSubmit = useCallback(() => {
+    if (missingE2bKey) { flashE2bHint(); return; }
     const trimmed = value.trim();
     const hasContent = trimmed || doneFiles.length > 0;
     if (!hasContent || anyUploading) return;
@@ -111,7 +123,7 @@ export default function WelcomeScreen({ onSubmit, mode, onOpenSettings }: Welcom
     onSubmit(trimmed, Object.keys(opts).length > 0 ? opts : undefined);
     setValue("");
     setPendingFiles([]);
-  }, [value, onSubmit, selectedFolder, doneFiles, anyUploading]);
+  }, [value, onSubmit, selectedFolder, doneFiles, anyUploading, missingE2bKey, flashE2bHint]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -180,15 +192,19 @@ export default function WelcomeScreen({ onSubmit, mode, onOpenSettings }: Welcom
     setSelectedFolder(folder);
     if (warmSessionId && folder) {
       // Mount the folder in the warm session
-      updateWarmSession(warmSessionId, { working_dir: folder }).catch(() => {});
+      updateWarmSession(warmSessionId, { working_dir: folder }).catch(() => {
+        dispatch({ type: "SHOW_NOTIFICATION", payload: { message: "Failed to mount folder", type: "error" } });
+      });
     }
     // If warmSessionId isn't ready yet, the effect below will flush when it arrives
-  }, [warmSessionId]);
+  }, [warmSessionId, dispatch]);
 
   // Flush pending folder mount when warm session becomes available
   useEffect(() => {
     if (warmSessionId && selectedFolder) {
-      updateWarmSession(warmSessionId, { working_dir: selectedFolder }).catch(() => {});
+      updateWarmSession(warmSessionId, { working_dir: selectedFolder }).catch(() => {
+        dispatch({ type: "SHOW_NOTIFICATION", payload: { message: "Failed to mount folder", type: "error" } });
+      });
     }
     // Only trigger when warmSessionId changes (not on every folder change —
     // handleFolderChange already handles that when the session is ready)
@@ -196,13 +212,11 @@ export default function WelcomeScreen({ onSubmit, mode, onOpenSettings }: Welcom
   }, [warmSessionId]);
 
   const removePendingFile = useCallback((id: string) => {
-    setPendingFiles((prev) => {
-      const file = prev.find((f) => f.id === id);
-      if (file?.status === "done" && file.result && warmSessionId) {
-        deleteSessionFile(warmSessionId, file.result.filename).catch(() => {});
-      }
-      return prev.filter((f) => f.id !== id);
-    });
+    const file = pendingFilesRef.current.find((f) => f.id === id);
+    if (file?.status === "done" && file.result && warmSessionId) {
+      deleteSessionFile(warmSessionId, file.result.filename).catch(() => {});
+    }
+    setPendingFiles((prev) => prev.filter((f) => f.id !== id));
   }, [warmSessionId]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
@@ -311,7 +325,7 @@ export default function WelcomeScreen({ onSubmit, mode, onOpenSettings }: Welcom
               <button
                 className="input-tool-btn"
                 title="Attach file"
-                onClick={() => fileRef.current?.click()}
+                onClick={() => { if (missingE2bKey) { flashE2bHint(); return; } fileRef.current?.click(); }}
                 disabled={!warmSessionId}
               >
                 <Paperclip />
@@ -323,14 +337,24 @@ export default function WelcomeScreen({ onSubmit, mode, onOpenSettings }: Welcom
             </div>
             <div className="input-toolbar-right">
               <ModelPicker />
-              <button
-                className="input-send"
-                onClick={handleSubmit}
-                disabled={(!value.trim() && doneFiles.length === 0) || anyUploading || noModels}
-                title={noModels ? "Configure a model in Settings first" : "Send message"}
-              >
-                <ArrowUp />
-              </button>
+              <div className="input-send-wrapper">
+                <button
+                  className="input-send"
+                  onClick={handleSubmit}
+                  disabled={(!value.trim() && doneFiles.length === 0) || anyUploading || noModels || missingE2bKey}
+                  title={noModels ? "Configure a model in Settings first" : "Send message"}
+                >
+                  <ArrowUp />
+                </button>
+                {missingE2bKey && (
+                  <div className={`e2b-hint${value.trim() || e2bHintFlash ? " e2b-hint-visible" : ""}`}>
+                    E2B API key required —{" "}
+                    <button className="e2b-hint-link" onClick={() => onOpenSettings("sandbox")}>
+                      Set in Settings
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
