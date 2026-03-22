@@ -15,20 +15,14 @@ from pydantic import BaseModel
 from openagent.exceptions import SkillError
 from openagent.harness.skill_spec import parse_skill_md, validate_skill_dir_name
 
+from openagent_api.paths import skills_dir
+
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
-
-def _resolve_skills_dir() -> Path:
-    data_dir = os.environ.get("OPENAGENT_DATA_DIR")
-    if data_dir:
-        return Path(data_dir) / "skills"
-    return Path(__file__).resolve().parent.parent.parent / "skills"
-
-
-SKILLS_DIR = _resolve_skills_dir()
+SKILLS_DIR = skills_dir()
 PUBLIC_DIR = SKILLS_DIR / "public"
 USER_DIR = SKILLS_DIR / "user"
 EXAMPLES_DIR = SKILLS_DIR / "examples"
