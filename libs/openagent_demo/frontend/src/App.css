@@ -1543,7 +1543,7 @@
 }
 
 .tool-status.is-running {
-  color: var(--warning, #f59e0b);
+  color: var(--warning, #d4a847);
   font-style: italic;
 }
 
