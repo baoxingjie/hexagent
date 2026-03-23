@@ -2208,7 +2208,7 @@ function SandboxTab({ config, onConfigChange }: ConfigTabProps) {
 
 function SkillsTab() {
   const [publicSkills, setPublicSkills] = useState<string[]>([]);
-  const [userSkills, setUserSkills] = useState<string[]>([]);
+  const [privateSkills, setPrivateSkills] = useState<string[]>([]);
   const [exampleSkills, setExampleSkills] = useState<string[]>([]);
   const [disabledSkills, setDisabledSkills] = useState<Set<string>>(new Set());
   const [errorPopup, setErrorPopup] = useState("");
@@ -2223,7 +2223,7 @@ function SkillsTab() {
     try {
       const data = await listSkills();
       setPublicSkills(data.public);
-      setUserSkills(data.user);
+      setPrivateSkills(data.private);
       setExampleSkills(data.examples ?? []);
       setDisabledSkills(new Set(data.disabled));
     } catch (e: unknown) {
@@ -2412,7 +2412,7 @@ function SkillsTab() {
       <div className="skills-group">
         <div className="skills-group-label">Custom</div>
         <div className="skills-list">
-          {userSkills.map((name) => (
+          {privateSkills.map((name) => (
             <div key={name} className={`skills-item ${disabledSkills.has(name) ? "skills-item--disabled" : ""}`}>
               <Package size={14} className="skills-item-icon" />
               <span className="skills-item-name">{name}</span>
@@ -2430,7 +2430,7 @@ function SkillsTab() {
               </button>
             </div>
           ))}
-          {userSkills.length === 0 && (
+          {privateSkills.length === 0 && (
             <p className="settings-hint skills-empty">No custom skills installed.</p>
           )}
         </div>

@@ -351,7 +351,7 @@ export async function testMcpConnection(server: McpServerEntry): Promise<{ ok: b
 
 export interface SkillsList {
   public: string[];
-  user: string[];
+  private: string[];
   examples: string[];
   disabled: string[];
 }

@@ -305,8 +305,8 @@ class AgentManager:
                 "Creating agent for model=%s (%s) session=%s",
                 target.display_name, target.model, session_key,
             )
-            # Cowork sessions have skills mounted at /mnt/skills/{public,user}
-            skill_paths = ("/mnt/skills/public", "/mnt/skills/user") if mode != "chat" else ()
+            # Cowork sessions have skills mounted at /mnt/skills/{public,private}
+            skill_paths = ("/mnt/skills/public", "/mnt/skills/private") if mode != "chat" else ()
 
             # PresentToUserTool output directory depends on mode
             if session_key == "chat":
@@ -352,24 +352,31 @@ class AgentManager:
             await self._mount_skills()
 
     async def _mount_skills(self) -> None:
-        """Mount skill directories (public + user) into the VM."""
+        """Mount skill directories (public + private) into the VM.
+
+        Public skills live in the bundled skills directory (ships with the
+        application).  Private skills live in user data.
+        """
         assert self._vm_manager is not None
-        from pathlib import Path
 
         from openagent.computer import Mount
 
+        from openagent_api.paths import bundled_skills_dir, skills_dir
+
         existing_guests = {m.guest_path for m in self._vm_manager.list_mounts()}
 
-        from openagent_api.paths import skills_dir
-        skills_base = skills_dir()
+        # (subdir_name, host_root)
+        mount_sources = {
+            "public": bundled_skills_dir() / "public",
+            "private": skills_dir() / "private",
+        }
         skill_mounts: list[Mount] = []
-        for subdir in ("public", "user"):
-            skills_dir = skills_base / subdir
-            if skills_dir.is_dir():
+        for subdir, host_path in mount_sources.items():
+            if host_path.is_dir():
                 guest = f"/mnt/skills/{subdir}"
                 if guest not in existing_guests:
                     skill_mounts.append(
-                        Mount(source=str(skills_dir), target=f"skills/{subdir}")
+                        Mount(source=str(host_path), target=f"skills/{subdir}")
                     )
         if skill_mounts:
             logger.info("Mounting %d skill dir(s): %s", len(skill_mounts), [m.target for m in skill_mounts])

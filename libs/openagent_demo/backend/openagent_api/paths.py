@@ -46,8 +46,21 @@ def config_path() -> Path:
 
 
 def skills_dir() -> Path:
-    """Root directory for user/public skills."""
+    """Root directory for user-owned skills (private, inactive)."""
     return data_dir() / "skills"
+
+
+def bundled_skills_dir() -> Path:
+    """Directory containing skills shipped with the application.
+
+    In development this is the ``backend/skills/`` source directory.
+    In a PyInstaller bundle it is ``sys._MEIPASS/skills/``.
+    """
+    import sys  # noqa: PLC0415
+
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "skills"  # type: ignore[attr-defined]
+    return Path(__file__).resolve().parent.parent / "skills"
 
 
 def deps_dir() -> Path:
