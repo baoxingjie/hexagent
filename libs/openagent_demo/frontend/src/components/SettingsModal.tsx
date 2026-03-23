@@ -363,6 +363,8 @@ function ModelTab({ config, onConfigChange }: ConfigTabProps) {
   const [showAddPicker, setShowAddPicker] = useState(false);
   const [showKey, setShowKey] = useState<Record<string, boolean>>({});
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+  // Cache per-model, per-provider base_url so switching providers preserves user input
+  const providerUrlCache = useRef<Record<string, Record<string, string>>>({});
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<{ idx: number; half: "top" | "bottom" } | null>(null);
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -518,8 +520,15 @@ function ModelTab({ config, onConfigChange }: ConfigTabProps) {
                           key={p.id}
                           className={`mc-pill ${presetId === p.id ? "mc-pill--active" : ""}`}
                           onClick={() => {
+                            // Save current base_url under current provider before switching
+                            const curPresetId = presetIdFromProvider(m.provider);
+                            if (!providerUrlCache.current[m.id]) providerUrlCache.current[m.id] = {};
+                            providerUrlCache.current[m.id][curPresetId] = m.base_url;
+
+                            // Restore cached base_url for target provider, or use preset default
+                            const cached = providerUrlCache.current[m.id]?.[p.id];
                             const updates: Partial<ModelConfig> = { provider: p.provider };
-                            updates.base_url = p.custom_url ? "" : p.base_url;
+                            updates.base_url = cached ?? (p.custom_url ? "" : p.base_url);
                             updateModel(m.id, updates);
                           }}
                           type="button"
