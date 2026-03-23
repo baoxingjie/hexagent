@@ -1,12 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { X, Plus, Trash2, Monitor, Moon, Sun, Unplug, SlidersHorizontal, Cpu, ChevronDown, ChevronRight, Check, Loader2, Eye, EyeOff, GripVertical, Bot, Wrench, Globe, ScrollText, Zap, FolderOpen, FolderPlus, Server, CircleCheck, CircleAlert, Upload, Package, Download, AppWindow, TriangleAlert } from "lucide-react";
 import type { Settings } from "../hooks/useSettings";
-import { getServerConfig, updateServerConfig, testMcpConnection, browseFolder, listSkills, uploadSkill, deleteSkill, toggleSkill, installSkill, getVMStatus, installVMBackend, getVMBuildStatus, buildVM, getVMProvisionStatus, provisionVM, cancelProvision, getProvisionLog } from "../api";
-import type { VMStatus, ProvisionStepDef } from "../api";
+import { getServerConfig, updateServerConfig, testMcpConnection, browseFolder, listSkills, uploadSkill, deleteSkill, toggleSkill, installSkill } from "../api";
 import { useAppContext } from "../store";
 import type { ServerConfig, ModelConfig, AgentConfig, McpServerEntry } from "../api";
 import { loadRecentFolders, saveRecentFolders } from "../recentFolders";
 import type { RecentFolder } from "../recentFolders";
+import { useVMSetup } from "../vmSetup";
+import type { PhaseStatus } from "../vmSetup";
 
 interface SettingsModalProps {
   open: boolean;
@@ -1679,265 +1680,10 @@ function SubagentTab({ config, onConfigChange }: ConfigTabProps) {
 
 // ── Sandbox Tab ──
 
-type PhaseStatus = "checking" | "pending" | "running" | "done" | "error";
-
 function SandboxTab({ config, onConfigChange }: ConfigTabProps) {
-  const { dispatch } = useAppContext();
+  const vm = useVMSetup();
   const [showKey, setShowKey] = useState(!config.sandbox.e2b_api_key);
   const [folders, setFolders] = useState<RecentFolder[]>(() => loadRecentFolders());
-
-  /** Refresh the app-level vmStatus so cowork mode unblocks. */
-  const refreshAppVmStatus = useCallback(() => {
-    getVMStatus()
-      .then((vs) => dispatch({ type: "SET_VM_STATUS", payload: vs }))
-      .catch(() => {});
-  }, [dispatch]);
-
-  // Phase 1: Lima
-  const [vmStatus, setVmStatus] = useState<VMStatus | null>(null);
-  const [phase1, setPhase1] = useState<PhaseStatus>("checking");
-  const [phase1Msg, setPhase1Msg] = useState("");
-  const [phase1Error, setPhase1Error] = useState("");
-
-  // Phase 2: VM Build
-  const [phase2, setPhase2] = useState<PhaseStatus>("pending");
-  const [phase2Msg, setPhase2Msg] = useState("");
-  const [phase2Error, setPhase2Error] = useState("");
-
-  // Phase 3: Provision
-  const [phase3, setPhase3] = useState<PhaseStatus>("pending");
-  const [phase3Error, setPhase3Error] = useState("");
-  const [provSteps, setProvSteps] = useState<ProvisionStepDef[]>([]);
-  const [provStepStatus, setProvStepStatus] = useState<Record<string, PhaseStatus>>({});
-  const [provStepMsg, setProvStepMsg] = useState<Record<string, string>>({});
-  const [provLog, setProvLog] = useState<string | null>(null);
-
-  // Abort controllers for SSE streams
-  const buildCtrl = useRef<AbortController | null>(null);
-  const provCtrl = useRef<AbortController | null>(null);
-
-  // Cleanup on unmount
-  useEffect(() => () => {
-    buildCtrl.current?.abort();
-    provCtrl.current?.abort();
-  }, []);
-
-  // ── Initial status check ──
-  useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      // Always try to load provision step definitions for the big picture
-      try {
-        const ps = await getVMProvisionStatus();
-        if (cancelled) return;
-        setProvSteps(ps.steps);
-        // We'll update statuses below if we get to phase 3 checks
-        if (ps.markers?.provisioned) {
-          const statuses: Record<string, PhaseStatus> = {};
-          for (const s of ps.steps) statuses[s.id] = "done";
-          setProvStepStatus(statuses);
-        } else if (ps.markers && ps.markers.steps_done.length > 0) {
-          const statuses: Record<string, PhaseStatus> = {};
-          for (const s of ps.steps) {
-            statuses[s.id] = ps.markers.steps_done.includes(s.id) ? "done" : "pending";
-          }
-          setProvStepStatus(statuses);
-        }
-      } catch { /* best effort — step defs come from backend constants */ }
-
-      // Phase 1
-      let limaInstalled = false;
-      try {
-        const vs = await getVMStatus();
-        if (cancelled) return;
-        setVmStatus(vs);
-        if (!vs.supported) { setPhase1("error"); setPhase1Error("Not supported on this platform"); return; }
-        if (vs.installed) {
-          setPhase1("done");
-          limaInstalled = true;
-        } else {
-          setPhase1("pending");
-        }
-      } catch {
-        if (cancelled) return;
-        setPhase1("error");
-        setPhase1Error("Could not check VM status");
-        return;
-      }
-
-      if (!limaInstalled) return;
-
-      // Phase 2
-      let vmReady = false;
-      try {
-        const bs = await getVMBuildStatus();
-        if (cancelled) return;
-        if (bs.status === "running") {
-          setPhase2("running");
-          attachBuild();
-        } else if (bs.vm_state === "Running") {
-          setPhase2("done");
-          vmReady = true;
-        } else if (bs.vm_state === "Stopped") {
-          setPhase2("pending");
-          setPhase2Msg("VM exists but is stopped");
-        } else {
-          setPhase2("pending");
-        }
-      } catch {
-        if (cancelled) return;
-        setPhase2("pending");
-      }
-
-      if (!vmReady) return;
-
-      // Phase 3 — re-check status for running state
-      try {
-        const ps = await getVMProvisionStatus();
-        if (cancelled) return;
-        setProvSteps(ps.steps);
-        if (ps.status === "running") {
-          setPhase3("running");
-          attachProvision();
-        } else if (ps.markers?.provisioned) {
-          setPhase3("done");
-          const statuses: Record<string, PhaseStatus> = {};
-          for (const s of ps.steps) statuses[s.id] = "done";
-          setProvStepStatus(statuses);
-        } else if (ps.markers && ps.markers.steps_done.length > 0) {
-          setPhase3("pending");
-          const statuses: Record<string, PhaseStatus> = {};
-          for (const s of ps.steps) {
-            statuses[s.id] = ps.markers.steps_done.includes(s.id) ? "done" : "pending";
-          }
-          setProvStepStatus(statuses);
-        } else {
-          setPhase3("pending");
-        }
-      } catch {
-        if (cancelled) return;
-        setPhase3("pending");
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Phase 1: Install Lima ──
-  const handleInstallLima = async () => {
-    setPhase1("running");
-    setPhase1Error("");
-    setPhase1Msg("Starting installation...");
-    await installVMBackend(
-      (_step, message) => setPhase1Msg(message),
-      () => {
-        setPhase1("done");
-        setPhase1Msg("");
-        refreshAppVmStatus();
-        // Auto-advance to phase 2
-        setPhase2("pending");
-      },
-      (message) => {
-        setPhase1("error");
-        setPhase1Msg("");
-        setPhase1Error(message);
-      },
-    );
-  };
-
-  // ── Phase 2: Build VM ──
-  const attachBuild = () => {
-    setPhase2("running");
-    setPhase2Error("");
-    buildCtrl.current?.abort();
-    buildCtrl.current = buildVM(
-      (_step, message) => setPhase2Msg(message),
-      () => {
-        setPhase2("done");
-        setPhase2Msg("");
-        refreshAppVmStatus(); // Unblocks cowork mode in the app
-      },
-      (message) => {
-        setPhase2("error");
-        setPhase2Msg("");
-        setPhase2Error(message);
-      },
-    );
-  };
-
-  const handleBuildVM = () => {
-    attachBuild();
-  };
-
-  // ── Phase 3: Provision ──
-  const attachProvision = (force = false) => {
-    setPhase3("running");
-    setPhase3Error("");
-    setProvLog(null);
-    provCtrl.current?.abort();
-    provCtrl.current = provisionVM(
-      {
-        onStepStart(step, message) {
-          setProvStepStatus((prev) => ({ ...prev, [step]: "running" }));
-          setProvStepMsg((prev) => ({ ...prev, [step]: message }));
-
-        },
-        onStepProgress(step, message) {
-          setProvStepMsg((prev) => ({ ...prev, [step]: message }));
-
-        },
-        onStepDone(step, message) {
-          setProvStepStatus((prev) => ({ ...prev, [step]: "done" }));
-          setProvStepMsg((prev) => ({ ...prev, [step]: message }));
-        },
-        onStepSkip(step) {
-          setProvStepStatus((prev) => ({ ...prev, [step]: "done" }));
-        },
-        onStepError(step, message) {
-          setProvStepStatus((prev) => ({ ...prev, [step]: "error" }));
-          setProvStepMsg((prev) => ({ ...prev, [step]: message }));
-        },
-        onDone() {
-          setPhase3("done");
-        },
-        onError(message) {
-          setPhase3("error");
-          setPhase3Error(message);
-        },
-      },
-      { force },
-    );
-  };
-
-  const startProvision = (force = false) => {
-    // Initialize step statuses to pending
-    getVMProvisionStatus()
-      .then((ps) => {
-        setProvSteps(ps.steps);
-        const statuses: Record<string, PhaseStatus> = {};
-        for (const s of ps.steps) statuses[s.id] = "pending";
-        setProvStepStatus(statuses);
-        attachProvision(force);
-      })
-      .catch(() => attachProvision(force));
-  };
-
-  const handleViewLog = async () => {
-    try {
-      const log = await getProvisionLog();
-      setProvLog(log);
-    } catch {
-      setProvLog("(Could not fetch log)");
-    }
-  };
-
-  const handleStopProvision = async () => {
-    try { await cancelProvision(); } catch { /* ignore */ }
-    provCtrl.current?.abort();
-    setPhase3("error");
-    setPhase3Error("Stopped by user");
-  };
 
   const toggleFolderPermission = (path: string) => {
     const updated = folders.map((f) =>
@@ -1966,9 +1712,9 @@ function SandboxTab({ config, onConfigChange }: ConfigTabProps) {
     }
   };
 
-  // Determine overall VM status for the card header
-  // Cowork mode is usable once Lima is installed and VM is running (phases 1+2).
-  // Phase 3 (dependency installation) is optional and can run in the background.
+  const { vmStatus, phase1, phase1Msg, phase1Error, phase2, phase2Msg, phase2Error,
+    phase3, phase3Error, provSteps, provStepStatus, provStepMsg, provLog } = vm;
+
   // Cowork mode is usable once Lima is installed and VM is running (phases 1+2).
   // Phase 3 (dependency installation) can run in the background.
   const vmUsable = phase1 === "done" && phase2 === "done";
@@ -2073,10 +1819,10 @@ function SandboxTab({ config, onConfigChange }: ConfigTabProps) {
                   {phase1 === "done" && <span className="vm-phase-badge vm-phase-badge--done">Installed</span>}
                   {phase1 === "running" && phase1Msg && <span className="vm-phase-msg">{phase1Msg}</span>}
                   {phase1 === "pending" && (
-                    <button className="vm-phase-action" type="button" onClick={handleInstallLima}>Install</button>
+                    <button className="vm-phase-action" type="button" onClick={vm.installLima}>Install</button>
                   )}
                   {phase1 === "error" && (
-                    <button className="vm-phase-action vm-phase-action--retry" type="button" onClick={handleInstallLima}>Retry</button>
+                    <button className="vm-phase-action vm-phase-action--retry" type="button" onClick={vm.installLima}>Retry</button>
                   )}
                 </div>
                 {phase1 === "error" && phase1Error && (
@@ -2092,10 +1838,10 @@ function SandboxTab({ config, onConfigChange }: ConfigTabProps) {
                   {phase2 === "done" && <span className="vm-phase-badge vm-phase-badge--done">Ready</span>}
                   {phase2 === "running" && phase2Msg && <span className="vm-phase-msg">{phase2Msg}</span>}
                   {phase2 === "pending" && phase1 === "done" && (
-                    <button className="vm-phase-action" type="button" onClick={handleBuildVM}>Install</button>
+                    <button className="vm-phase-action" type="button" onClick={vm.buildVMInstance}>Install</button>
                   )}
                   {phase2 === "error" && (
-                    <button className="vm-phase-action vm-phase-action--retry" type="button" onClick={handleBuildVM}>Retry</button>
+                    <button className="vm-phase-action vm-phase-action--retry" type="button" onClick={vm.buildVMInstance}>Retry</button>
                   )}
                 </div>
                 {phase2 === "error" && phase2Error && (
@@ -2110,15 +1856,15 @@ function SandboxTab({ config, onConfigChange }: ConfigTabProps) {
                   <span className="vm-phase-label">VM System Dependencies</span>
                   {phase3 === "done" && <span className="vm-phase-badge vm-phase-badge--done">Complete</span>}
                   {phase3 === "pending" && vmUsable && (
-                    <button className="vm-phase-action" type="button" onClick={() => startProvision()}>Install in background</button>
+                    <button className="vm-phase-action" type="button" onClick={() => vm.startProvision()}>Install in background</button>
                   )}
                   {phase3 === "running" && (
-                    <button className="vm-phase-action vm-phase-action--stop" type="button" onClick={handleStopProvision}>Stop</button>
+                    <button className="vm-phase-action vm-phase-action--stop" type="button" onClick={vm.stopProvision}>Stop</button>
                   )}
                   {phase3 === "error" && (
                     <>
-                      <button className="vm-phase-action vm-phase-action--retry" type="button" onClick={() => startProvision()}>Retry</button>
-                      <button className="vm-phase-action vm-phase-action--secondary" type="button" onClick={handleViewLog}>Log</button>
+                      <button className="vm-phase-action vm-phase-action--retry" type="button" onClick={() => vm.startProvision()}>Retry</button>
+                      <button className="vm-phase-action vm-phase-action--secondary" type="button" onClick={vm.viewLog}>Log</button>
                     </>
                   )}
                 </div>

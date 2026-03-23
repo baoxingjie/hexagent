@@ -45,12 +45,25 @@ PYINSTALLER_ARGS=(
 
 run_pyinstaller() {
     # Build for the current (native) architecture.
-    echo "==> Installing PyInstaller..."
+    # Uses a dedicated build venv so we never touch the dev .venv.
     cd "$BACKEND_DIR"
-    uv pip install pyinstaller
+
+    local build_venv="$BACKEND_DIR/.venv-build"
+    export UV_PROJECT_ENVIRONMENT="$build_venv"
+
+    if [ ! -d "$build_venv" ]; then
+        echo "==> Creating build venv..."
+        uv venv "$build_venv"
+    fi
+
+    echo "==> Installing dependencies..."
+    uv sync
+    uv pip install --python "$build_venv/bin/python" pyinstaller
 
     echo "==> Building backend with PyInstaller..."
-    uv run pyinstaller "${PYINSTALLER_ARGS[@]}"
+    "$build_venv/bin/python" -m PyInstaller "${PYINSTALLER_ARGS[@]}"
+
+    unset UV_PROJECT_ENVIRONMENT
 
     echo "==> Copying dist to electron/backend_dist..."
     rm -rf "$ELECTRON_DIR/backend_dist"
@@ -59,7 +72,7 @@ run_pyinstaller() {
 
 run_pyinstaller_arch() {
     # Build for a specific architecture using `arch` to force the CPU mode.
-    # Uses a separate venv per arch so native extensions match the target.
+    # Uses a dedicated build venv per arch (never touches the dev .venv).
     local target_arch="$1"
     local arch_flag="$target_arch"
 
@@ -76,13 +89,14 @@ run_pyinstaller_arch() {
 
     cd "$BACKEND_DIR"
 
-    # Use a per-arch venv so native extensions match the target architecture.
-    local arch_venv="$BACKEND_DIR/.venv-${arch_flag}"
+    # Build venvs use a .venv-build-{arch} prefix so they never collide
+    # with the dev .venv or each other.
+    local arch_venv="$BACKEND_DIR/.venv-build-${arch_flag}"
     export UV_PROJECT_ENVIRONMENT="$arch_venv"
 
-    # Create fresh venv if it doesn't exist or architecture doesn't match
+    # Create fresh venv if it doesn't exist
     if [ ! -d "$arch_venv" ]; then
-        echo "==> Creating $arch_flag venv..."
+        echo "==> Creating $arch_flag build venv..."
         arch -"$arch_flag" uv venv "$arch_venv"
     fi
 

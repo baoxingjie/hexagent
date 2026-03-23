@@ -106,12 +106,11 @@ class AgentManager:
         if session_name and session_name in self._computers:
             return self._computers[session_name], session_name
 
-        async with self._setup_lock:
-            # Re-check after acquiring lock (another coroutine may have created it)
-            if session_name and session_name in self._computers:
-                return self._computers[session_name], session_name
-
-            # Guard: check that limactl is available before attempting VM ops
+        # Ensure VM manager is ready BEFORE acquiring the setup lock.
+        # _ensure_vm_manager() uses the same _setup_lock internally;
+        # calling it while already holding the lock would deadlock
+        # (asyncio.Lock is not reentrant).
+        if self._vm_manager is None:
             import shutil
 
             if not shutil.which("limactl"):
@@ -119,10 +118,12 @@ class AgentManager:
                     "Cowork mode requires VM setup. "
                     "Please install and configure it in Settings \u2192 Sandbox."
                 )
+            await self._ensure_vm_manager()
 
-            # Lazy-create LocalVM
-            if self._vm_manager is None:
-                await self._ensure_vm_manager()
+        async with self._setup_lock:
+            # Re-check after acquiring lock (another coroutine may have created it)
+            if session_name and session_name in self._computers:
+                return self._computers[session_name], session_name
 
             try:
                 if session_name:
@@ -356,6 +357,11 @@ class AgentManager:
 
         Public skills live in the bundled skills directory (ships with the
         application).  Private skills live in user data.
+
+        This may restart the VM if new mounts are needed (idempotent — skips
+        mounts already present in lima.yaml).  The cost is paid once, during
+        warm session creation which runs in the background while the user is
+        on the welcome screen.
         """
         assert self._vm_manager is not None
 

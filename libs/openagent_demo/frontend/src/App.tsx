@@ -10,6 +10,8 @@ import type { Tab as SettingsTab } from "./components/SettingsModal";
 import OnboardingWizard from "./components/OnboardingWizard";
 import SearchModal from "./components/SearchModal";
 import Toast from "./components/Toast";
+import VMSetupFloater from "./components/VMSetupFloater";
+import { VMSetupProvider } from "./vmSetup";
 import type { Attachment, ConversationMode, Message } from "./types";
 import "./App.css";
 
@@ -317,10 +319,17 @@ function App() {
       const modelId = state.selectedModelId || undefined;
       const mode = state.selectedMode;
       const workingDir = options?.workingDir;
-      // Wait for in-flight warm session if user sent before it resolved
+      // Use the warm session if it's already resolved.  If it's still
+      // in-flight, give it a short grace period — but never block the user
+      // for long (the backend can create a session on the fly).
       let sessionId = state.warmSessionId || undefined;
       if (!sessionId && warmSessionPromiseRef.current) {
-        try { sessionId = await warmSessionPromiseRef.current; } catch { /* proceed without */ }
+        try {
+          sessionId = await Promise.race([
+            warmSessionPromiseRef.current,
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 2000)),
+          ]);
+        } catch { /* proceed without — backend will create session on demand */ }
       }
 
       try {
@@ -359,51 +368,57 @@ function App() {
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>
-      <div className="app">
-        <Sidebar
-          onNewConversation={handleNewConversation}
-          onOpenSettings={() => openSettings()}
-          onOpenSearch={() => setSearchOpen(true)}
-          userName={settings.fullName}
+      <VMSetupProvider>
+        <div className="app">
+          <Sidebar
+            onNewConversation={handleNewConversation}
+            onOpenSettings={() => openSettings()}
+            onOpenSearch={() => setSearchOpen(true)}
+            userName={settings.fullName}
+          />
+          <div
+            className={`sidebar-backdrop ${state.sidebarCollapsed ? "hidden" : ""}`}
+            onClick={() => dispatch({ type: "TOGGLE_SIDEBAR" })}
+          />
+          <ChatArea
+            conversation={activeConversation ?? null}
+            onSendMessage={handleSendMessage}
+            onOpenSettings={openSettings}
+            rightPanel={
+              <RightPanel
+                visible={rightPanelVisible}
+                conversation={activeConversation ?? null}
+                streamingBlocks={activeStreamingBlocks}
+              />
+            }
+          />
+        </div>
+        <OnboardingWizard
+          open={setupNeeded}
+          onComplete={() => setSetupNeeded(false)}
+          settings={settings}
+          onSettingsChange={setSettings}
         />
-        <div
-          className={`sidebar-backdrop ${state.sidebarCollapsed ? "hidden" : ""}`}
-          onClick={() => dispatch({ type: "TOGGLE_SIDEBAR" })}
+        <SettingsModal
+          open={settingsOpen}
+          onClose={() => { setSettingsOpen(false); setSettingsTab(undefined); }}
+          settings={settings}
+          onSettingsChange={setSettings}
+          initialTab={settingsTab}
         />
-        <ChatArea
-          conversation={activeConversation ?? null}
-          onSendMessage={handleSendMessage}
-          onOpenSettings={openSettings}
-          rightPanel={
-            <RightPanel
-              visible={rightPanelVisible}
-              conversation={activeConversation ?? null}
-              streamingBlocks={activeStreamingBlocks}
-            />
-          }
+        <SearchModal
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
         />
-      </div>
-      <OnboardingWizard
-        open={setupNeeded}
-        onComplete={() => setSetupNeeded(false)}
-        settings={settings}
-        onSettingsChange={setSettings}
-      />
-      <SettingsModal
-        open={settingsOpen}
-        onClose={() => { setSettingsOpen(false); setSettingsTab(undefined); }}
-        settings={settings}
-        onSettingsChange={setSettings}
-        initialTab={settingsTab}
-      />
-      <SearchModal
-        open={searchOpen}
-        onClose={() => setSearchOpen(false)}
-      />
-      <Toast
-        notifications={state.notifications}
-        onDismiss={(id) => dispatch({ type: "DISMISS_NOTIFICATION", payload: id })}
-      />
+        <VMSetupFloater
+          settingsOpen={settingsOpen}
+          onOpenSettings={() => openSettings("sandbox")}
+        />
+        <Toast
+          notifications={state.notifications}
+          onDismiss={(id) => dispatch({ type: "DISMISS_NOTIFICATION", payload: id })}
+        />
+      </VMSetupProvider>
     </AppContext.Provider>
   );
 }
