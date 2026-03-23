@@ -18,6 +18,7 @@ PYINSTALLER_ARGS=(
     --name openagent_api_server
     --onedir
     --noconfirm
+    --clean
     --hidden-import uvicorn.logging
     --hidden-import uvicorn.loops
     --hidden-import uvicorn.loops.auto
@@ -42,6 +43,7 @@ PYINSTALLER_ARGS=(
 )
 
 run_pyinstaller() {
+    # Build for the current (native) architecture.
     echo "==> Installing PyInstaller..."
     cd "$BACKEND_DIR"
     uv pip install pyinstaller
@@ -54,17 +56,43 @@ run_pyinstaller() {
     cp -r "$BACKEND_DIR/dist/openagent_api_server" "$ELECTRON_DIR/backend_dist"
 }
 
-run_pyinstaller_x64() {
-    echo "==> Building x86_64 backend via Rosetta..."
-    if ! arch -x86_64 true 2>/dev/null; then
-        echo "ERROR: Rosetta 2 not installed. Install with: softwareupdate --install-rosetta"
-        exit 1
+run_pyinstaller_arch() {
+    # Build for a specific architecture using `arch` to force the CPU mode.
+    # Uses a separate venv per arch so native extensions match the target.
+    local target_arch="$1"
+    local arch_flag="$target_arch"
+
+    if [ "$target_arch" = "x64" ] || [ "$target_arch" = "x86_64" ]; then
+        arch_flag="x86_64"
+        echo "==> Building x86_64 backend via Rosetta..."
+        if ! arch -x86_64 true 2>/dev/null; then
+            echo "ERROR: Rosetta 2 not installed. Install with: softwareupdate --install-rosetta"
+            exit 1
+        fi
+    else
+        echo "==> Building $target_arch backend..."
     fi
+
     cd "$BACKEND_DIR"
-    # Use arch -x86_64 to run PyInstaller under Rosetta
-    # This requires an x86_64-compatible Python
-    arch -x86_64 uv pip install pyinstaller
-    arch -x86_64 uv run pyinstaller "${PYINSTALLER_ARGS[@]}" --target-architecture x86_64
+
+    # Use a per-arch venv so native extensions match the target architecture.
+    local arch_venv="$BACKEND_DIR/.venv-${arch_flag}"
+    export UV_PROJECT_ENVIRONMENT="$arch_venv"
+
+    # Create fresh venv if it doesn't exist or architecture doesn't match
+    if [ ! -d "$arch_venv" ]; then
+        echo "==> Creating $arch_flag venv..."
+        arch -"$arch_flag" uv venv "$arch_venv"
+    fi
+
+    echo "==> Installing dependencies for $arch_flag..."
+    arch -"$arch_flag" uv sync
+    uv pip install --python "$arch_venv/bin/python" pyinstaller
+
+    echo "==> Running PyInstaller for $arch_flag..."
+    arch -"$arch_flag" "$arch_venv/bin/python" -m PyInstaller "${PYINSTALLER_ARGS[@]}" --target-architecture "$arch_flag"
+
+    unset UV_PROJECT_ENVIRONMENT
 
     rm -rf "$ELECTRON_DIR/backend_dist"
     cp -r "$BACKEND_DIR/dist/openagent_api_server" "$ELECTRON_DIR/backend_dist"
@@ -73,18 +101,21 @@ run_pyinstaller_x64() {
 # ── Build based on target architecture ──
 case "$TARGET_ARCH" in
     x64|x86_64)
-        run_pyinstaller_x64
+        run_pyinstaller_arch x86_64
         ;;
-    arm64|"")
+    arm64)
+        run_pyinstaller_arch arm64
+        ;;
+    "")
         run_pyinstaller
         ;;
     universal)
         echo "==> Building universal backend (arm64 + x86_64)..."
         # Build arm64 first
-        run_pyinstaller
+        run_pyinstaller_arch arm64
         mv "$ELECTRON_DIR/backend_dist" "$ELECTRON_DIR/backend_dist_arm64"
         # Build x64
-        run_pyinstaller_x64
+        run_pyinstaller_arch x86_64
         mv "$ELECTRON_DIR/backend_dist" "$ELECTRON_DIR/backend_dist_x64"
         # Merge with lipo
         echo "==> Creating universal binary with lipo..."
