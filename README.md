@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/images/logo.svg" alt="Open Agent" width="300"/>
+  <img src=".github/images/logo.svg" alt="HexAgent" width="300"/>
 </p>
 
 <p align="center">
@@ -10,7 +10,7 @@
 
 A general-purpose **agent harness** that gives LLM agents **access to a computer via the terminal** to complete tasks the way developers do.
 
-**Vendor-agnostic by design**. OpenAgent isn't coupled to any specific LLM provider or proprietary features. The goal: bring powerful agentic capabilities to open-weight LLMs.
+**Vendor-agnostic by design**. HexAgent isn't coupled to any specific LLM provider or proprietary features. The goal: bring powerful agentic capabilities to open-weight LLMs.
 
 ### Core Philosophy
 
