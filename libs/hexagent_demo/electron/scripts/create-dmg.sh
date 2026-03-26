@@ -42,7 +42,7 @@ echo "Creating DMG: $(basename "$DMG_PATH")"
 STAGING_DIR=$(mktemp -d)
 APP_PATH_COPY="$STAGING_DIR/${PRODUCT_NAME}.app"
 echo "Staging app (resolving hardlinks)..."
-rsync -a --no-hard-links "$APP_PATH/" "$APP_PATH_COPY/"
+ditto "$APP_PATH" "$APP_PATH_COPY"
 
 create-dmg \
     --volname "$PRODUCT_NAME" \
